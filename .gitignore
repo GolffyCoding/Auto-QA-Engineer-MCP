@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+qa-mcp-state.json
+qa-mcp-state.json.lock
+reports/
+test-artifacts/
+.venv/
