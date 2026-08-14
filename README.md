@@ -1,4 +1,4 @@
-# 🤖 Autonomous QA Engineer MCP
+# Autonomous QA Engineer MCP
 
 **Give an LLM agent a real QA engineer's workflow** — scan a project, design test cases by the book, run them across browser/API/mobile, diagnose failures, propose a fix, get human sign-off, apply it, and verify — all as [MCP](https://modelcontextprotocol.io/) tools any MCP-compatible agent (Claude Desktop, Claude Code, or your own agent loop) can call.
 
@@ -87,14 +87,14 @@ Each one scans a small sample app with intentional bugs, generates a full determ
 
 | Phase | What it does |
 |---|---|
-| 🔍 **Understand** | `project.scan` detects language, framework, database, auth, existing tests, CI/CD |
-| 🧠 **Design** | `test.generate` builds a full suite from field/business-rule/role/UX-state/state-machine facts the agent reports |
-| ▶️ **Execute** | Drives Playwright, Selenium, Robot Framework, or Cypress for browser; REST + k6 for API; Appium or Maestro for mobile |
-| 👁️ **Observe** | Screenshots, console logs, network logs, stdout/stderr captured per test |
-| 🩺 **Diagnose** | `failure.inspect` classifies failures into 15 categories via weighted pattern matching, with a category-specific root cause and fix suggestion |
-| 🔧 **Fix** | `fix_loop` proposes a patch — **blocked from auto-applying without human approval** |
-| ✅ **Verify** | Re-runs the target test and compares against the baseline run to confirm the fix and catch new regressions |
-| 📊 **Report** | Self-contained HTML/JSON report with an executive risk summary and a real root cause + suggested fix on every failed test — not a bare pass/fail table; defect tracking; CI/CD trigger (GitHub Actions, GitLab CI) |
+| **Understand** | `project.scan` detects language, framework, database, auth, existing tests, CI/CD |
+| **Design** | `test.generate` builds a full suite from field/business-rule/role/UX-state/state-machine facts the agent reports |
+| **Execute** | Drives Playwright, Selenium, Robot Framework, or Cypress for browser; REST + k6 for API; Appium or Maestro for mobile |
+| **Observe** | Screenshots, console logs, network logs, stdout/stderr captured per test |
+| **Diagnose** | `failure.inspect` classifies failures into 15 categories via weighted pattern matching, with a category-specific root cause and fix suggestion |
+| **Fix** | `fix_loop` proposes a patch — **blocked from auto-applying without human approval** |
+| **Verify** | Re-runs the target test and compares against the baseline run to confirm the fix and catch new regressions |
+| **Report** | Self-contained HTML/JSON report with an executive risk summary and a real root cause + suggested fix on every failed test — not a bare pass/fail table; defect tracking; CI/CD trigger (GitHub Actions, GitLab CI) |
 
 ---
 
