@@ -51,3 +51,29 @@ def test_corrupt_json_file_does_not_crash_on_load(tmp_path):
     store = PersistentStore(str(path))
 
     assert store.namespace("anything") == {}
+
+
+def test_repeated_save_on_same_instance_keeps_writing_new_mutations(tmp_path):
+    """Regression test: a caller that calls namespace() once (as every real
+    module in this codebase does in __init__) and then mutates the returned
+    dict across many separate save() calls must see every mutation land on
+    disk - not just the first one. save() used to reassign self._data to a
+    brand new dict on every call, which silently detached the reference
+    namespace() had already handed out; the second save() onward wrote stale
+    data and any new mutation was lost.
+    """
+    path = str(tmp_path / "state.json")
+    store = PersistentStore(path)
+    ns = store.namespace("test_runs")
+
+    ns["run-1"] = {"total_tests": 0}
+    store.save()
+
+    ns["run-1"] = {"total_tests": 1}
+    store.save()
+
+    ns["run-1"] = {"total_tests": 2}
+    store.save()
+
+    reloaded = PersistentStore(path)
+    assert reloaded.namespace("test_runs")["run-1"]["total_tests"] == 2

@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-active--development-orange)
-![Tests](https://img.shields.io/badge/tests-32%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen)
 
 ---
 
@@ -342,14 +342,22 @@ pip install -e .
 python -m pytest tests/ -v
 ```
 
-`tests/` มี unit test จริง 32 ตัวสำหรับ core logic ที่ไม่ต้องพึ่ง browser/device จริง:
+`tests/` มี unit test จริง 74 ตัว ครอบคลุมทุกโมดูลหลักยกเว้นส่วนที่ต้องมี browser/mobile device จริงต่ออยู่ (`adapters/browser.py`, `adapters/mobile.py`):
 
-- `test_fix_loop_engine.py` — ยืนยันว่า patch **apply ไม่ได้** ถ้ายังไม่ผ่าน `approve()`, ว่า `read_only=True` (default) ไม่แตะไฟล์บนดิสก์จริง, และว่า MCP tool `fix_loop.apply_patch(read_only=False)` **ถูกบล็อกเสมอ** เว้นแต่ human operator ตั้ง env var `QA_MCP_ALLOW_AUTO_APPLY=1` ไว้ล่วงหน้านอก session ของ agent
-- `test_persistence.py` — ยืนยันว่า state รอด process restart จริง และหลาย `PersistentStore` instance ที่ owner คนละ namespace ไม่เขียนทับข้อมูลกันเอง
-- `test_test_design_generator.py` — ยืนยันว่า boundary/negative/security case ถูกสร้างครบตามหลักการ (BVA ที่ค่า max พอดีและ max+1, security probe เฉพาะ field type ที่ inject ได้), ว่า state-machine coverage ครบทั้ง matrix ไม่ใช่สุ่มเลือก, และว่า unreachable state ถูก flag ถูกต้อง
-- `test_failure_analyzer.py` — ยืนยันว่า weighted pattern matching เลือก category ที่เจาะจงกว่าเสมอเมื่อมีหลาย pattern แมตช์พร้อมกัน, ว่า evidence persist ข้าม process ได้จริง, และว่า `compare_runs`/`find_regression` คำนวณ new/fixed/still-failing ถูกต้อง
+- `test_fix_loop_engine.py` — patch **apply ไม่ได้** ถ้ายังไม่ผ่าน `approve()`, `read_only=True` (default) ไม่แตะไฟล์บนดิสก์จริง, MCP tool `fix_loop.apply_patch(read_only=False)` **ถูกบล็อกเสมอ** เว้นแต่ตั้ง `QA_MCP_ALLOW_AUTO_APPLY=1`
+- `test_persistence.py` — state รอด process restart จริง, หลาย `PersistentStore` instance คนละ namespace ไม่เขียนทับกัน, และ regression test สำหรับบั๊ก data-loss ที่เจอ (ดูด้านล่าง)
+- `test_test_design_generator.py` — BVA boundary ถูกต้อง (max/max+1), security probe จำกัดเฉพาะ field type ที่ inject ได้, state-machine matrix ครบ, unreachable state ถูกจับ
+- `test_failure_analyzer.py` — weighted pattern matching เลือก category เจาะจงถูกต้อง, evidence persist ข้าม process, `compare_runs`/`find_regression` ถูกต้อง
+- `test_executor.py` — รัน subprocess จริง (pass/fail/timeout), เขียน artifact ลงดิสก์จริง, นับ pass/fail ใน run ถูกต้อง, retry มี exponential backoff, state รอด restart
+- `test_defect_manager.py` — Defect CRUD + persistence, `CIManager.detect()` จาก marker file จริง, `ci.run` **ปฏิเสธทันทีไม่ยิง network** ถ้าไม่มี token/repo, `GitManager` ต่อ git repo จริง (status/log/commit)
+- `test_database_analyzer.py` — รันกับ SQLite จริง: หา orphaned FK จริง, บล็อก non-SELECT ใน `db.query`, บล็อก SQL injection ผ่านชื่อ table/column
+- `test_api_adapter.py` — `RESTAdapter` ผ่าน fake HTTP transport (ไม่ยิง network จริง), JSON-schema assertion logic, k6 script generation, `_find_k6_binary` fail-fast เมื่อไม่มี binary
 
-ยังไม่ครอบคลุม: adapters ที่ต้องมี browser/mobile device จริง (`adapters/`), `execution/executor.py`, `defect_cicd/`, `analyzers/` — โมดูลเหล่านี้ทำ I/O กับ process ภายนอกจริง (subprocess, DB, HTTP) เขียน test ต้องใช้ mock/fixture เพิ่มเติม ยังไม่ได้ทำในรอบนี้
+### บั๊ก data-loss จริงที่เจอระหว่างเขียน test (แก้แล้ว)
+
+`PersistentStore.save()` เดิม reassign `self._data = current` (dict ใหม่) ทุกครั้งที่ save — แต่ `namespace()` คืน reference ของ dict เดิมให้ caller ถือไว้ยาว ๆ (ทุก module เรียก `namespace()` แค่ครั้งเดียวตอน `__init__` แล้ว mutate reference นั้นตลอดอายุ process) หลัง `save()` ครั้งแรก reference นั้นหลุดออกจาก `self._data` ทันที **save() ครั้งที่สองเป็นต้นไปเขียนค่าเก่าซ้ำ ๆ ไม่เห็นการเปลี่ยนแปลงใหม่เลย** — เจอจริงตอนเทส `TestExecutor` รัน 2 test เข้า run เดียวกัน ผลลัพธ์ตัวที่สองหายจากดิสก์ กระทบทุก module ที่ persist (`TestExecutor`, `DefectTracker`, `FixEngine`, `FailureAnalyzer`) แก้แล้วโดยให้ `save()` merge เข้า dict object เดิมแบบ in-place แทนการ reassign — มี regression test (`test_repeated_save_on_same_instance_keeps_writing_new_mutations`) ยืนยันแล้ว
+
+ยังไม่ครอบคลุม: `adapters/browser.py`, `adapters/mobile.py` — ต้องมี browser/emulator จริงต่ออยู่ถึงจะเทสแบบไม่ mock ได้ (mock ก็ได้แต่จะไม่ยืนยันว่า integration จริงทำงาน ซึ่งขัดกับ philosophy ของ test suite ชุดนี้ที่เน้นรันจริงเท่าที่ทำได้)
 
 ## 🔒 Approval gate: `fix_loop.apply_patch`
 

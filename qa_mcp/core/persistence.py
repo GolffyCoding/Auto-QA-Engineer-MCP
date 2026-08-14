@@ -75,17 +75,28 @@ class PersistentStore:
         """Read-merge-write ภายใต้ cross-process lock: เอา namespace ที่
         instance นี้เป็นเจ้าของทับลงบนข้อมูลล่าสุดจากดิสก์ (กัน instance อื่น
         ที่เขียนไปก่อนหน้าถูกล้างทิ้ง, และกัน process อื่นเขียนแทรกกลางคัน)
+
+        สำคัญ: namespace ที่เราเป็นเจ้าของต้อง merge เข้า self._data[ns] แบบ
+        in-place (mutate dict เดิม) ห้าม reassign เป็น dict ใหม่ - caller
+        อย่าง TestExecutor/DefectTracker/FixEngine เรียก namespace() แค่ครั้ง
+        เดียวตอน __init__ แล้วถือ reference นั้นไว้ mutate ยาว ๆ ตลอดอายุ
+        process ถ้า save() reassign self._data เป็น dict ใหม่ (ของเดิมที่ทำ)
+        reference เดิมที่ caller ถืออยู่จะหลุดออกจาก self._data ทันทีหลัง
+        save() ครั้งแรก - save() ครั้งต่อไปจะเขียนค่าเก่าซ้ำ ๆ ไม่เห็นการ
+        เปลี่ยนแปลงใหม่เลย (data loss แบบเงียบ ๆ - เจอจริงตอนเทส TestExecutor
+        เขียนผลลัพธ์ test 2 ตัวเข้า run เดียวกัน ตัวที่สองหายจากดิสก์)
         """
         with _file_lock(f"{self.path}.lock"):
             current = self._read_from_disk()
+
             for ns in self._owned_namespaces:
-                # merge ระดับ key ไม่ใช่แทนที่ทั้ง namespace - กัน process อื่น
-                # ที่เพิ่ง save() entry คนละตัว (เช่นคนละ defect_id) ใน
-                # namespace เดียวกันถูกเขียนทับหายไป
-                merged = current.setdefault(ns, {})
-                merged.update(self._data.get(ns, {}))
-                current[ns] = merged
-            self._data = current
+                target = self._data.setdefault(ns, {})
+                for key, value in current.get(ns, {}).items():
+                    target.setdefault(key, value)
+
+            for ns, value in current.items():
+                if ns not in self._owned_namespaces:
+                    self._data[ns] = value
 
             tmp_path = f"{self.path}.tmp"
             with open(tmp_path, "w", encoding="utf-8") as f:
