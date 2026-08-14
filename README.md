@@ -6,7 +6,7 @@ The core idea: **the LLM should never be the one deciding what counts as a compl
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-131%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-141%20passing-brightgreen)
 ![Validated](https://img.shields.io/badge/validated-real%20browser%20%7C%20real%20network%20%7C%20real%20device-informational)
 
 ---
@@ -256,7 +256,8 @@ python -m pytest tests/ -v
 | `test_database_analyzer.py` | Real SQLite database, real orphaned-FK detection |
 | `test_reporter.py` | Root-cause diagnosis attached to failed tests, executive-summary risk rollup |
 | `test_report_pdf.py` | **Real PDF generation via headless Chromium** — verifies actual `%PDF-` file output |
-| `test_mcp_server.py` | **The real MCP server (`qa_mcp.server`) an LLM actually connects to** — a full stdio session over a real subprocess (`initialize` → `list_tools` → `call_tool`), plus a check that every tool visible to the debug CLI is also reachable through the real server |
+| `test_mcp_server.py` | **The real MCP server (`qa_mcp.server`) an LLM actually connects to** — a full stdio session over a real subprocess (`initialize` → `list_tools` → `call_tool`), a check that every tool visible to the debug CLI is also reachable through the real server, and that saved rules / an instructions file actually reach the LLM's connection-time instructions |
+| `test_knowledge_base.py` | Company/project conventions and failure patterns persist correctly and survive a restart |
 | `test_api_adapter.py` | Fake HTTP transport (schema/assertion logic) |
 | `test_api_integration.py` | **Real HTTP server + real `k6` binary** — actual sockets, actual load test |
 | `test_browser_adapter.py` | **Real headless Chromium via Playwright** — actual DOM, actual screenshots |
@@ -279,6 +280,7 @@ Every bug this hardening pass found — a silent data-loss bug in the persistenc
 | 7 | `defect_cicd` | Defect tracking, git operations, CI/CD triggers |
 | 8 | `core.reporter` | JSON/HTML reporting |
 | 9 | `analyzers.database_analyzer` | Post-test database state verification |
+| 10 | `knowledge` | Company/project conventions and failure patterns that persist across sessions — see [Customizing for your company](#customizing-for-your-company) |
 
 Run `qa-mcp --list-tools` for the full list of registered tools with their implementing function paths.
 
@@ -299,15 +301,60 @@ Non-Python, install only what you'll use:
 
 ### Environment variables
 
+See [`.env.example`](.env.example) for the full list with explanations — copy it to `.env` and fill in what you need (qa-mcp-serve doesn't load `.env` automatically; export the values some other way, e.g. through your MCP client's server config).
+
 | Variable | Purpose |
 |---|---|
 | `QA_MCP_STATE_DB` | Persistence file path (default `./qa-mcp-state.json`) — point your whole team at the same path to share state |
 | `QA_MCP_ALLOW_AUTO_APPLY` | Must be `1` for `fix_loop.apply_patch` to write to disk — see [Built for a team, not a demo](#built-for-a-team-not-a-demo) |
+| `QA_MCP_INSTRUCTIONS_FILE` | Path to a text/markdown file of your team's conventions, appended to what the LLM is told on connect — see [Customizing for your company](#customizing-for-your-company) |
 | `QA_MCP_K6_BIN` | Path to the `k6` binary if it's not on `PATH` |
 | `GITHUB_TOKEN` | For `ci.run`/`ci.get_status` with GitHub Actions (needs `actions:write`) |
 | `GITLAB_TRIGGER_TOKEN` / `GITLAB_API_TOKEN` | For `ci.run` (trigger) / `ci.get_status` (API) with GitLab CI |
 
 > The persistence layer's cross-process file lock uses `fcntl` (POSIX only). On Windows, locking is silently skipped — writes still work, but aren't safe under concurrent writers from multiple processes.
+
+---
+
+## Customizing for your company
+
+An LLM connecting fresh to `qa-mcp-serve` doesn't know your staging URL, which browser framework your CI actually has installed, or that your team already decided not to do visual regression testing and why. Two ways to teach it that once instead of every session:
+
+**1. A conventions file (`QA_MCP_INSTRUCTIONS_FILE`)** — for things you know up front and that don't change often. Write plain text/markdown, point the env var at it:
+
+```markdown
+<!-- company-qa-conventions.md -->
+- Always use Playwright, never Selenium - our CI images don't have ChromeDriver.
+- The staging environment is https://staging.acme.internal.
+- Any auth or payment failure is P0, regardless of what fix_loop suggests.
+```
+
+```bash
+QA_MCP_INSTRUCTIONS_FILE=./company-qa-conventions.md qa-mcp-serve
+```
+
+This gets appended to what the LLM is told the moment it connects — no tool call needed.
+
+**2. The `knowledge.*` tools** — for things that accumulate as you actually use the tool: a failure pattern specific to your codebase you keep manually re-diagnosing, or a QA decision worth remembering so the agent doesn't propose it again next quarter.
+
+```python
+await session.call_tool("knowledge.add_rule", {
+    "rule_name": "default_framework",
+    "rule": "Always use Playwright, never Selenium - our CI images don't have ChromeDriver",
+})
+await session.call_tool("knowledge.add_failure_pattern", {
+    "pattern": "connection pool exhausted",
+    "fix": "This is almost always the payment webhook retry storm, not a real DB issue - check webhook retry config first",
+    "confidence": 0.9,
+})
+await session.call_tool("knowledge.add_decision", {
+    "context": "visual regression testing",
+    "decision": "not doing it",
+    "rationale": "design changes too frequently for it to be worth the maintenance cost",
+})
+```
+
+Every `knowledge.add_rule` call persists through the same `QA_MCP_STATE_DB` store as everything else, and — unlike the failure patterns and decisions, which an agent looks up on demand via `knowledge.get_similar_failures`/`knowledge.get_decisions` — saved rules are folded automatically into the instructions every future `qa-mcp-serve` session sees, the same way the conventions file is. Add a rule once; every agent that connects after that already knows it.
 
 ---
 

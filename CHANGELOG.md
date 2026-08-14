@@ -2,6 +2,19 @@
 
 Detailed record of real bugs found and fixed while building out test coverage and validating this project end-to-end (unit tests, full workflow runs, and real hardware/network validation). Kept separate from `README.md` so the README stays focused on how to use the project rather than how it was hardened.
 
+## Company customization: a whole subsystem existed but was dead code
+
+Prompted by feedback that there was no `.env.example`, no way to customize the LLM's instructions/role, and no way to teach the tool company-specific conventions. Turned up that `qa_mcp/knowledge/base.py` already had a `KnowledgeBase` class built for exactly this - project rules, failure patterns, team decisions - but it was **never registered as an MCP tool anywhere** (not in `mcp_server.py`'s CLI table, not in `server.py`'s real tool table) and nothing else in the codebase referenced it except a stray comment. A company could not have used it no matter how they tried; there was no way in.
+
+Fixed:
+
+- `KnowledgeBase` now uses the shared `PersistentStore` (atomic writes, safe for concurrent writers) instead of its original unlocked, non-atomic `json.dump`/`json.load` - it had the exact same data-loss exposure as the bug already fixed elsewhere in `PersistentStore` itself, just never noticed because nothing called it.
+- Registered 6 new tools (`knowledge.add_rule`, `.get_rules`, `.add_failure_pattern`, `.get_similar_failures`, `.add_decision`, `.get_decisions`) in both the CLI table and the real server's `TOOLS` dict.
+- `create_server()` in `qa_mcp/server.py` now builds its `instructions` (what the LLM is told at connection time) dynamically: base instructions, then any saved `knowledge.add_rule` entries, then the contents of `QA_MCP_INSTRUCTIONS_FILE` if set. A rule added once is visible in every future session without the agent re-fetching it.
+- Added `.env.example` at the repo root documenting every environment variable this project reads, including the new `QA_MCP_INSTRUCTIONS_FILE`.
+
+15 new tests (`tests/test_knowledge_base.py`, plus 3 in `tests/test_mcp_server.py` covering the instructions-building logic). 141 tests total.
+
 ## The real MCP server (`qa_mcp.server`) had zero test coverage and tools missing from it
 
 Prompted by a question about how to actually connect an LLM to this project: `qa_mcp.server` is the module a real MCP client (Claude Desktop, Claude Code, or anything else) connects to - `qa_mcp.mcp_server` (the `qa-mcp --call` CLI) is a separate, debug-only dispatch table that dynamically imports tools by string path and was the only one with any test coverage. Before this pass, `qa_mcp.server` had never been imported in this environment - the `mcp` package (an existing `requirements.txt`/`setup.py` dependency) had never actually been installed here, and no test touched the module at all.

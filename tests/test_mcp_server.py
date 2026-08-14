@@ -32,6 +32,54 @@ async def test_all_registered_tools_are_visible_to_a_real_mcp_client():
     assert names == set(TOOLS.keys())
 
 
+def test_instructions_include_saved_project_rules(tmp_path, monkeypatch):
+    """Company/project conventions saved via knowledge.add_rule must show
+    up in what the LLM is told at connection time, without the agent
+    having to call a tool to fetch them first - otherwise "teach it once"
+    doesn't actually save future sessions any work.
+    """
+    from qa_mcp.knowledge.base import KnowledgeBase
+    import qa_mcp.server as server_module
+
+    kb = KnowledgeBase(state_path=str(tmp_path / "state.json"))
+    kb.add_project_rule("default_framework", "Always use Playwright, never Selenium")
+    monkeypatch.setattr("qa_mcp.knowledge.base._kb", kb)
+
+    server = create_server()
+    assert "default_framework" in server.instructions
+    assert "Always use Playwright, never Selenium" in server.instructions
+
+
+def test_instructions_include_custom_instructions_file(tmp_path, monkeypatch):
+    """QA_MCP_INSTRUCTIONS_FILE lets a company drop in a plain markdown/text
+    file of conventions with no tool calls at all - the simpler path for
+    conventions known up front and unlikely to change often.
+    """
+    from qa_mcp.knowledge.base import KnowledgeBase
+
+    monkeypatch.setattr("qa_mcp.knowledge.base._kb", KnowledgeBase(state_path=str(tmp_path / "state.json")))
+
+    instructions_file = tmp_path / "company-instructions.md"
+    instructions_file.write_text("Severity mapping: any auth/payment bug is P0.")
+    monkeypatch.setenv("QA_MCP_INSTRUCTIONS_FILE", str(instructions_file))
+
+    server = create_server()
+    assert "Severity mapping: any auth/payment bug is P0." in server.instructions
+
+
+def test_instructions_work_with_no_customization_at_all(tmp_path, monkeypatch):
+    """No saved rules, no instructions file - must still produce the base
+    instructions without erroring.
+    """
+    from qa_mcp.knowledge.base import KnowledgeBase
+
+    monkeypatch.setattr("qa_mcp.knowledge.base._kb", KnowledgeBase(state_path=str(tmp_path / "state.json")))
+    monkeypatch.delenv("QA_MCP_INSTRUCTIONS_FILE", raising=False)
+
+    server = create_server()
+    assert "Autonomous QA Engineer runtime" in server.instructions
+
+
 def test_pdf_report_tool_is_registered_for_real_llm_clients():
     """Regression: report.generate_pdf was added to the CLI tool table
     (mcp_server.py) but not to the real server's TOOLS dict - an LLM

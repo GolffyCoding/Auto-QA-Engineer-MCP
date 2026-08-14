@@ -91,6 +91,14 @@ class QAMCPServer:
             "db.get_table_state": "qa_mcp.analyzers.database_analyzer.db_get_table_state",
             "db.check_fk_integrity": "qa_mcp.analyzers.database_analyzer.db_check_fk_integrity",
             "db.query": "qa_mcp.analyzers.database_analyzer.db_query",
+
+            # Phase 10: Knowledge Base (company/project-specific conventions)
+            "knowledge.add_rule": "qa_mcp.knowledge.base.knowledge_add_rule",
+            "knowledge.get_rules": "qa_mcp.knowledge.base.knowledge_get_rules",
+            "knowledge.add_failure_pattern": "qa_mcp.knowledge.base.knowledge_add_failure_pattern",
+            "knowledge.get_similar_failures": "qa_mcp.knowledge.base.knowledge_get_similar_failures",
+            "knowledge.add_decision": "qa_mcp.knowledge.base.knowledge_add_decision",
+            "knowledge.get_decisions": "qa_mcp.knowledge.base.knowledge_get_decisions",
         }
 
     async def call(self, tool_name: str, **kwargs) -> Dict[str, Any]:

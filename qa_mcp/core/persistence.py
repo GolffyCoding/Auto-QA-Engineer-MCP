@@ -3,10 +3,9 @@ Persistence layer - ทำให้ state ของ qa-mcp รอด process res
 
 เดิม TestExecutor/DefectTracker/FixEngine/FailureAnalyzer เก็บทุกอย่างใน
 memory ของ process เดียว (แก้ statelessness-ข้าม-call ไปแล้วในรอบก่อน แต่ยัง
-ไม่รอด restart) - โมดูลนี้เพิ่ม JSON-file-backed store แบบเดียวกับที่
-`qa_mcp.knowledge.base.KnowledgeBase` ใช้อยู่แล้ว (real, working pattern ที่
-มีอยู่ในโค้ดเดิมแต่ไม่เคยถูกเอาไปใช้ที่อื่น) มาใช้ร่วมกันทุก module ที่ต้องการ
-persist state
+ไม่รอด restart) - โมดูลนี้เพิ่ม JSON-file-backed store กลางที่ทุก module ที่
+ต้องการ persist state ใช้ร่วมกัน (`TestExecutor`, `DefectTracker`,
+`FixEngine`, `FailureAnalyzer`, `KnowledgeBase`)
 
 Default path มาจาก env var `QA_MCP_STATE_DB` - ตั้งเป็นคนละไฟล์ต่อ
 โปรเจกต์/ทีมได้ เพื่อไม่ให้ state ของงานคนละงานปนกัน

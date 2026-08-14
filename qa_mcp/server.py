@@ -47,6 +47,14 @@ from qa_mcp.execution.executor import (
 )
 from qa_mcp.core.reporter import report_generate, report_generate_html, report_generate_pdf
 from qa_mcp.analyzers.database_analyzer import db_get_table_state, db_check_fk_integrity, db_query
+from qa_mcp.knowledge.base import (
+    knowledge_add_rule,
+    knowledge_get_rules,
+    knowledge_add_failure_pattern,
+    knowledge_get_similar_failures,
+    knowledge_add_decision,
+    knowledge_get_decisions,
+)
 from qa_mcp.failure_analysis.analyzer import (
     failure_inspect,
     failure_classify,
@@ -158,7 +166,54 @@ TOOLS = {
     "db.get_table_state": db_get_table_state,
     "db.check_fk_integrity": db_check_fk_integrity,
     "db.query": db_query,
+    # Phase 10: Knowledge Base (company/project-specific conventions)
+    "knowledge.add_rule": knowledge_add_rule,
+    "knowledge.get_rules": knowledge_get_rules,
+    "knowledge.add_failure_pattern": knowledge_add_failure_pattern,
+    "knowledge.get_similar_failures": knowledge_get_similar_failures,
+    "knowledge.add_decision": knowledge_add_decision,
+    "knowledge.get_decisions": knowledge_get_decisions,
 }
+
+_BASE_INSTRUCTIONS = (
+    "Autonomous QA Engineer runtime. Typical loop: project.scan the "
+    "target repo, test.generate cases, browser.open/click/fill/"
+    "screenshot/assert to execute them (call browser.close when "
+    "done), failure.inspect + fix_loop.diagnose/propose/approve/"
+    "apply_patch/verify to fix failures, then defect.create to "
+    "report anything unresolved."
+)
+
+
+def _build_instructions() -> str:
+    """ประกอบ instructions ที่ LLM เห็นตอน connect - เริ่มจาก base instructions
+    แล้วต่อท้ายด้วย company/project convention 2 แหล่ง เพื่อให้ agent ไม่ต้อง
+    ถูกสอนบริบทเดิมซ้ำทุกเซสชัน:
+
+    1. `knowledge.add_rule` ที่เคยบันทึกไว้ (persist ผ่าน QA_MCP_STATE_DB -
+       เพิ่มครั้งเดียว เห็นทุก session ต่อไป ไม่ต้องแก้โค้ด)
+    2. ไฟล์ที่ชี้ผ่าน env var `QA_MCP_INSTRUCTIONS_FILE` ถ้ามี (เช่น
+       "เราใช้ Playwright เท่านั้น", "staging URL คือ https://...",
+       "severity mapping ของทีมนี้คือ ...") - เขียนเป็น markdown/text ธรรมดา
+       ไม่ต้องเรียก tool เลย เหมาะกับ convention ที่รู้ตั้งแต่ต้นและไม่เปลี่ยนบ่อย
+    """
+    import os
+
+    from qa_mcp.knowledge.base import _kb
+
+    parts = [_BASE_INSTRUCTIONS]
+
+    rules = _kb.get_project_rules()
+    if rules:
+        rule_lines = "\n".join(f"- {name}: {r['rule']}" for name, r in rules.items())
+        parts.append(f"Project/company conventions (from knowledge.add_rule):\n{rule_lines}")
+
+    instructions_file = os.environ.get("QA_MCP_INSTRUCTIONS_FILE")
+    if instructions_file and os.path.exists(instructions_file):
+        with open(instructions_file, "r", encoding="utf-8") as f:
+            parts.append(f.read().strip())
+
+    return "\n\n".join(parts)
 
 
 def create_server() -> MCPServer:
@@ -167,17 +222,7 @@ def create_server() -> MCPServer:
     ใช้ฟังก์ชันจริง (ไม่ใช่ generic **kwargs wrapper) เพื่อให้ MCP สร้าง
     JSON schema ของ input ให้ LLM เห็น argument ที่ถูกต้องจริง ๆ
     """
-    server = MCPServer(
-        name="qa-mcp",
-        instructions=(
-            "Autonomous QA Engineer runtime. Typical loop: project.scan the "
-            "target repo, test.generate cases, browser.open/click/fill/"
-            "screenshot/assert to execute them (call browser.close when "
-            "done), failure.inspect + fix_loop.diagnose/propose/approve/"
-            "apply_patch/verify to fix failures, then defect.create to "
-            "report anything unresolved."
-        ),
-    )
+    server = MCPServer(name="qa-mcp", instructions=_build_instructions())
     for name, fn in TOOLS.items():
         server.add_tool(fn, name=name)
     return server
