@@ -182,6 +182,15 @@ class MaestroAdapter(MobileAdapter):
         self._steps: List[Dict[str, Any]] = []
         self._workdir = Path(tempfile.mkdtemp(prefix="qa-mcp-maestro-"))
 
+    # ข้อความ error ที่ Maestro CLI คืนมาเป็นครั้งคราวกับอุปกรณ์จริงที่ต่อผ่าน USB
+    # (พิสูจน์แล้วว่า transient จริง - ทดสอบยิง `maestro test` เดิมซ้ำ 3 ครั้งติดกัน
+    # กับอุปกรณ์จริง ได้ COMPLETED 2 ครั้ง, "not connected" 1 ครั้ง แม้ `adb devices`
+    # จะเห็น device ต่ออยู่ตลอดเวลา) - MaestroAdapter เสี่ยงกับปัญหานี้มากกว่า
+    # AppiumAdapter เพราะ spawn `maestro test` process ใหม่ทุก action แทนที่จะ
+    # ถือ session เดียวยาว ๆ จึงคุ้มที่จะ retry เฉพาะ error นี้แบบสั้น ๆ
+    _TRANSIENT_DISCONNECT_MARKER = "was requested, but it is not connected"
+    _MAX_RETRIES = 2
+
     async def _run_flow(self) -> Dict[str, Any]:
         flow_path = self._workdir / "flow.yaml"
         # Maestro's YAML format is `appId: ...` then a `---` document separator
@@ -196,13 +205,20 @@ class MaestroAdapter(MobileAdapter):
         if self.udid:
             args += ["--udid", self.udid]
 
-        proc = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            env={**os.environ, "MAESTRO_CLI_NO_ANALYTICS": "1"},
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
+        for attempt in range(self._MAX_RETRIES + 1):
+            proc = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env={**os.environ, "MAESTRO_CLI_NO_ANALYTICS": "1"},
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
+            output = stdout.decode(errors="ignore")
+            if proc.returncode != 0 and self._TRANSIENT_DISCONNECT_MARKER in output and attempt < self._MAX_RETRIES:
+                await asyncio.sleep(1)
+                continue
+            break
+
         return {
             "exit_code": proc.returncode,
             "passed": proc.returncode == 0,

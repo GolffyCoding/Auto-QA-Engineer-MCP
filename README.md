@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-active--development-orange)
-![Tests](https://img.shields.io/badge/tests-105%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-108%20passing-brightgreen)
 
 ---
 
@@ -371,7 +371,9 @@ python -m pytest tests/ -v
 
 หลังแก้แล้ว ยืนยันบนอุปกรณ์จริงว่าใช้งานได้จริงครบ: `launch()` เปิดแอป Settings จริงสำเร็จ, `assert_element()` ตรวจ element จริงถูกต้องทั้งเคส found/not-found, `tap()` คลิก element จริงแล้ว UI เปลี่ยนจริง, `swipe()` สั่ง gesture จริงสำเร็จ, `close()` ปิด session สะอาด — ยืนยันว่า `AppiumAdapter` ไม่ใช่ stub และทำงานกับ infrastructure จริงตามที่ README เคยอ้างไว้ (การทดสอบจริงนี้เป็น manual validation ในอุปกรณ์เฉพาะของ sandbox นี้ ไม่ได้ผูกเข้า automated test suite เพราะอุปกรณ์จริงจะไม่มีอยู่ใน environment อื่น/CI)
 
-ยังไม่ได้ทดสอบ: `MaestroAdapter` กับอุปกรณ์จริง (Maestro CLI มีติดตั้งแล้วใน sandbox นี้แต่ยังไม่ได้ลอง)
+**`MaestroAdapter` กับอุปกรณ์จริง**: ทดสอบแล้วเช่นกัน (Maestro CLI + `ANDROID_HOME`/`ANDROID_SDK_ROOT` ต้อง export ก่อน ไม่งั้น `maestro list-devices` มองไม่เห็นอุปกรณ์จริงเลย - เป็นเรื่อง environment setup ไม่ใช่บั๊ก) `launch()`/`assert_element()`/`tap()` ยืนยันทำงานถูกต้องบนอุปกรณ์จริง
+
+ระหว่างทดสอบเจอว่า Maestro CLI เองมีอาการ flaky จริงกับอุปกรณ์ที่ต่อผ่าน USB — สั่ง `maestro test` เดิมซ้ำ ๆ ติดกัน 3 ครั้งกับ flow เดียวกัน ได้ `COMPLETED` 2 ครั้ง และ `"...is not connected"` 1 ครั้ง ทั้งที่ `adb devices` เห็นอุปกรณ์ต่ออยู่ตลอด (พิสูจน์ตรง ๆ ด้วยการรัน `maestro` standalone ซ้ำ ไม่เกี่ยวกับ qa_mcp เลย) `MaestroAdapter` เสี่ยงกับปัญหานี้มากกว่า `AppiumAdapter` เพราะ spawn `maestro test` process ใหม่ทุก action (ไม่ได้ถือ session เดียวยาว ๆ) จึงเพิ่ม **retry อัตโนมัติสูงสุด 2 ครั้ง เฉพาะตอนเจอข้อความ "is not connected"** เท่านั้น (ไม่ retry error อื่นเช่น assertion failure จริง เพราะจะเสียเวลาเปล่า) มี unit test ยืนยันทั้ง 3 เคส (retry แล้วสำเร็จ, retry ครบแล้วยัง fail, ไม่ retry error ที่ไม่ใช่ transient disconnect) โดยไม่ต้องใช้อุปกรณ์จริง (fake `maestro` binary เป็น shell script)
 
 ### บั๊กจริงที่เจอจากการรัน end-to-end workflow ทั้งระบบ (แก้แล้ว)
 
