@@ -45,7 +45,7 @@ from qa_mcp.execution.executor import (
     environment_start,
     environment_stop,
 )
-from qa_mcp.core.reporter import report_generate, report_generate_html
+from qa_mcp.core.reporter import report_generate, report_generate_html, report_generate_pdf
 from qa_mcp.analyzers.database_analyzer import db_get_table_state, db_check_fk_integrity, db_query
 from qa_mcp.failure_analysis.analyzer import (
     failure_inspect,
@@ -100,6 +100,8 @@ TOOLS = {
     "project.detect_stack": project_detect_stack,
     # Phase 2: Test Design
     "test.generate": test_generate,
+    "test.generate_api": test_generate,  # same engine; aliases kept in sync with mcp_server.py's CLI tool list
+    "test.generate_e2e": test_generate,
     "test.analyze_coverage": test_analyze_coverage,
     "test.prioritize": test_prioritize,
     # Phase 3: Automation Engine
@@ -151,6 +153,7 @@ TOOLS = {
     # Phase 8: Reporting
     "report.generate": report_generate,
     "report.generate_html": report_generate_html,
+    "report.generate_pdf": report_generate_pdf,
     # Phase 9: Database Validation
     "db.get_table_state": db_get_table_state,
     "db.check_fk_integrity": db_check_fk_integrity,

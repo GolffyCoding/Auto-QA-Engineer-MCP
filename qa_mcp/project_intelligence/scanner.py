@@ -71,9 +71,13 @@ class ProjectScanner:
         FrameworkType.VUE: ["vue.config", "@vue"],
         FrameworkType.ANGULAR: ["angular.json", "@angular"],
         FrameworkType.DJANGO: ["settings.py", "wsgi.py", "manage.py"],
-        FrameworkType.FLASK: ["Flask", "app.py", "flask"],
+        # "app.py"/"app.js" removed as indicators - too generic a filename to
+        # mean anything (found via real testing: this project's own
+        # sample-apps/*/app.py, which have nothing to do with Flask, made
+        # every scan of this repo misreport framework: Flask)
+        FrameworkType.FLASK: ["Flask", "flask"],
         FrameworkType.FASTAPI: ["FastAPI", "fastapi"],
-        FrameworkType.EXPRESS: ["express", "app.js"],
+        FrameworkType.EXPRESS: ["express"],
         FrameworkType.SPRING: ["pom.xml", "build.gradle", "@SpringBootApplication"],
         FrameworkType.LARAVEL: ["artisan", "laravel"],
         FrameworkType.RAILS: ["Gemfile", "rails", "config/routes.rb"],

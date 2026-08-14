@@ -2,6 +2,21 @@
 
 Detailed record of real bugs found and fixed while building out test coverage and validating this project end-to-end (unit tests, full workflow runs, and real hardware/network validation). Kept separate from `README.md` so the README stays focused on how to use the project rather than how it was hardened.
 
+## The real MCP server (`qa_mcp.server`) had zero test coverage and tools missing from it
+
+Prompted by a question about how to actually connect an LLM to this project: `qa_mcp.server` is the module a real MCP client (Claude Desktop, Claude Code, or anything else) connects to - `qa_mcp.mcp_server` (the `qa-mcp --call` CLI) is a separate, debug-only dispatch table that dynamically imports tools by string path and was the only one with any test coverage. Before this pass, `qa_mcp.server` had never been imported in this environment - the `mcp` package (an existing `requirements.txt`/`setup.py` dependency) had never actually been installed here, and no test touched the module at all.
+
+Once installed and actually exercised end to end (a real subprocess speaking real MCP over stdio - `initialize` → `list_tools` → `call_tool`), the API used (`MCPServer`, `add_tool`, `run(transport="stdio")`) checked out against the real SDK. But three tools present in the CLI's tool table were missing from the real server's `TOOLS` dict, meaning they showed up in `qa-mcp --list-tools` and worked via `qa-mcp --call`, but an LLM connected through `qa-mcp-serve` couldn't see or call them at all:
+
+- `report.generate_pdf` (the newly-added PDF export tool - simply forgotten when it was wired into the CLI table but not this one)
+- `test.generate_api` and `test.generate_e2e` (aliases of `test.generate`)
+
+Fixed by importing and registering all three. Added `tests/test_mcp_server.py`, including a test that diffs the CLI tool table against the real server's tool table so this class of bug can't reoccur silently, and a real end-to-end stdio session test.
+
+## Project scanner: "app.py" as a Flask indicator
+
+**Found live, from the exact bug-class fix above:** running the newly-added stdio integration test against this repo made `project.scan` report `framework: "Flask"` - wrong, this project doesn't use Flask. Root cause: `"app.py"` was listed as a Flask indicator in `FRAMEWORK_INDICATORS`, and this repo's own `sample-apps/checkout-demo/app.py` / `sample-apps/task-manager/app.py` (plain `http.server`, nothing to do with Flask) matched it. `app.py`/`app.js` are far too generic a filename to mean anything on their own - removed both as indicators; the config-file-based check (actual `Flask`/`flask`/`express` text in `requirements.txt`/`package.json`) still works correctly and is the reliable signal.
+
 ## PDF reports + sample apps
 
 Added `report.generate_pdf`, which renders the same HTML report through headless Chromium's print-to-PDF (Playwright, already a dependency — no new library needed) instead of a screenshot, so it gets real page breaks and print-safe styling via `@page`/`@media print` CSS. Added a document metadata line (report ID, run ID, generated-at timestamp) to both the HTML and PDF output, which was previously missing — a report with no identifying metadata isn't something you can file or reference later.

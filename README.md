@@ -6,7 +6,7 @@ The core idea: **the LLM should never be the one deciding what counts as a compl
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-131%20passing-brightgreen)
 ![Validated](https://img.shields.io/badge/validated-real%20browser%20%7C%20real%20network%20%7C%20real%20device-informational)
 
 ---
@@ -32,27 +32,58 @@ pip install -e .
 # See every tool the agent can call
 qa-mcp --list-tools
 
-# Try one tool directly (useful for debugging a single tool in isolation)
+# Try one tool directly (useful for debugging a single tool in isolation,
+# NOT for driving a real workflow - state doesn't persist between calls)
 qa-mcp --call project.scan --args '{"project_path": "."}'
 ```
 
-**For real use, run it as a long-lived MCP server** (state persists across tool calls within a session — the one-shot `qa-mcp --call` CLI above is for debugging a single tool, not for driving a real workflow):
+---
+
+## Connecting an LLM
+
+The debug CLI above (`qa-mcp --call`) spawns a fresh, stateless process per call - fine for checking one tool works, useless for a real agent loop where `browser.open` needs to still be talking to the same page when `browser.click` runs next. For that, an LLM needs to connect to **`qa-mcp-serve`**, which stays running as one long-lived process and keeps state (open browser page, pending patch proposals, defect tracker) alive across every tool call in the session.
+
+### Claude Desktop
+
+1. Find (or create) the config file:
+   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+   - Linux: `~/.config/Claude/claude_desktop_config.json`
+2. Add an entry under `mcpServers`:
+
+   ```json
+   {
+     "mcpServers": {
+       "qa-mcp": { "command": "qa-mcp-serve" }
+     }
+   }
+   ```
+
+   If `qa-mcp-serve` isn't on `PATH` where Claude Desktop launches from, use the full path instead (find it with `which qa-mcp-serve` after `pip install -e .`), or run it via `"command": "python3", "args": ["-m", "qa_mcp.server"]` with `"cwd"` set to this repo.
+3. Restart Claude Desktop. Open a new chat and check the tool/plug icon in the composer (or ask *"what MCP tools do you have?"*) - you should see `project.scan`, `test.generate`, `browser.open`, etc. listed.
+4. Try it: *"Use qa-mcp to scan this project and generate tests for its login form."*
+
+### Claude Code
 
 ```bash
-qa-mcp-serve
+claude mcp add qa-mcp -- qa-mcp-serve
 ```
 
-Point an MCP client at it — e.g. add to `claude_desktop_config.json` or `.mcp.json`:
+Or point it at the repo directly without installing the console script:
 
-```json
-{
-  "mcpServers": {
-    "qa-mcp": { "command": "qa-mcp-serve" }
-  }
-}
+```bash
+claude mcp add qa-mcp -- python3 -m qa_mcp.server
 ```
 
-Or drive it from your own agent loop:
+Verify with `claude mcp list`, then just ask Claude Code to use it in a session - e.g. *"scan this repo with qa-mcp and generate a test suite for the checkout flow."*
+
+### Any other MCP-compatible client
+
+Cursor, Windsurf, and other MCP clients all use the same config shape shown above (`command`/`args` under an `mcpServers` key) - check that client's docs for where the config file lives; the `qa-mcp-serve` entry itself doesn't change.
+
+### A custom agent loop (no MCP client, or a non-MCP LLM)
+
+Drive it directly over stdio with the official [MCP Python SDK](https://pypi.org/project/mcp/) - this is what any MCP client is doing under the hood, so it also works if you're wiring qa_mcp into your own orchestration code instead of Claude Desktop/Code:
 
 ```python
 import asyncio
@@ -65,12 +96,18 @@ async def main():
         async with ClientSession(read, write) as session:
             await session.initialize()
             await session.call_tool("browser.open", {"url": "https://example.com"})
-            await session.call_tool("browser.click", {"selector": "a"})
+            await session.call_tool("browser.click", {"selector": "a"})   # same page, still open
             await session.call_tool("browser.screenshot", {"name": "proof"})
             await session.call_tool("browser.close")
 
 asyncio.run(main())
 ```
+
+For an LLM that doesn't speak MCP natively (e.g. calling the OpenAI API directly), call `session.list_tools()` once, convert each tool's JSON schema into that provider's function/tool-calling format, and route the model's function-call requests through `session.call_tool(name, arguments)` - the MCP session above is the only qa_mcp-specific part; everything else is standard function calling.
+
+---
+
+## See it work
 
 **Want to see it work against something real before wiring it into your own project?**
 
@@ -219,6 +256,7 @@ python -m pytest tests/ -v
 | `test_database_analyzer.py` | Real SQLite database, real orphaned-FK detection |
 | `test_reporter.py` | Root-cause diagnosis attached to failed tests, executive-summary risk rollup |
 | `test_report_pdf.py` | **Real PDF generation via headless Chromium** — verifies actual `%PDF-` file output |
+| `test_mcp_server.py` | **The real MCP server (`qa_mcp.server`) an LLM actually connects to** — a full stdio session over a real subprocess (`initialize` → `list_tools` → `call_tool`), plus a check that every tool visible to the debug CLI is also reachable through the real server |
 | `test_api_adapter.py` | Fake HTTP transport (schema/assertion logic) |
 | `test_api_integration.py` | **Real HTTP server + real `k6` binary** — actual sockets, actual load test |
 | `test_browser_adapter.py` | **Real headless Chromium via Playwright** — actual DOM, actual screenshots |
