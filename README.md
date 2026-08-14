@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-active--development-orange)
-![Tests](https://img.shields.io/badge/tests-12%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-32%20passing-brightgreen)
 
 ---
 
@@ -342,12 +342,14 @@ pip install -e .
 python -m pytest tests/ -v
 ```
 
-`tests/` มี unit test จริงสำหรับส่วนที่มีความเสี่ยงสูงสุดในระบบ (เขียนไฟล์ source code จริงและ persist state ข้าม process):
+`tests/` มี unit test จริง 32 ตัวสำหรับ core logic ที่ไม่ต้องพึ่ง browser/device จริง:
 
 - `test_fix_loop_engine.py` — ยืนยันว่า patch **apply ไม่ได้** ถ้ายังไม่ผ่าน `approve()`, ว่า `read_only=True` (default) ไม่แตะไฟล์บนดิสก์จริง, และว่า MCP tool `fix_loop.apply_patch(read_only=False)` **ถูกบล็อกเสมอ** เว้นแต่ human operator ตั้ง env var `QA_MCP_ALLOW_AUTO_APPLY=1` ไว้ล่วงหน้านอก session ของ agent
 - `test_persistence.py` — ยืนยันว่า state รอด process restart จริง และหลาย `PersistentStore` instance ที่ owner คนละ namespace ไม่เขียนทับข้อมูลกันเอง
+- `test_test_design_generator.py` — ยืนยันว่า boundary/negative/security case ถูกสร้างครบตามหลักการ (BVA ที่ค่า max พอดีและ max+1, security probe เฉพาะ field type ที่ inject ได้), ว่า state-machine coverage ครบทั้ง matrix ไม่ใช่สุ่มเลือก, และว่า unreachable state ถูก flag ถูกต้อง
+- `test_failure_analyzer.py` — ยืนยันว่า weighted pattern matching เลือก category ที่เจาะจงกว่าเสมอเมื่อมีหลาย pattern แมตช์พร้อมกัน, ว่า evidence persist ข้าม process ได้จริง, และว่า `compare_runs`/`find_regression` คำนวณ new/fixed/still-failing ถูกต้อง
 
-ยังไม่ครอบคลุมทุกโมดูล (เช่น `test_design`, `failure_analysis`, adapters ที่ต้องมี browser/device จริง) — ลำดับความสำคัญตอนนี้คือโมดูลที่มีผลข้างเคียงถาวร (เขียนไฟล์/ข้อมูล) ก่อน
+ยังไม่ครอบคลุม: adapters ที่ต้องมี browser/mobile device จริง (`adapters/`), `execution/executor.py`, `defect_cicd/`, `analyzers/` — โมดูลเหล่านี้ทำ I/O กับ process ภายนอกจริง (subprocess, DB, HTTP) เขียน test ต้องใช้ mock/fixture เพิ่มเติม ยังไม่ได้ทำในรอบนี้
 
 ## 🔒 Approval gate: `fix_loop.apply_patch`
 
