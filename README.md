@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-active--development-orange)
-![Tests](https://img.shields.io/badge/tests-91%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-100%20passing-brightgreen)
 
 ---
 
@@ -359,7 +359,9 @@ python -m pytest tests/ -v
 
 - `test_browser_adapter.py` — รันกับ headless Chromium จริงผ่าน Playwright (มี `playwright install` ในเครื่องนี้แล้ว) กับ static HTML fixture (`tests/fixtures/form.html`) ไม่ mock อะไรเลย: `open` ได้ title/url จริง, `fill`+`click` แก้ DOM จริงแล้วอ่านกลับได้, `assert_visible`/`assert_text` ตรวจ element ที่ซ่อน/โผล่จริงตามการโต้ตอบจริง, `screenshot` เขียนไฟล์ PNG จริงลงดิสก์ (ตรวจ magic bytes), console log ถูกจับได้จริง, และ `BrowserFactory` singleton ทำให้ `browser.open → browser.fill → browser.click → browser.assert` (4 MCP tool call แยกกัน) ใช้ browser session/page เดียวกันจริงตามที่ design ไว้
 
-ยังไม่ครอบคลุม: `adapters/mobile.py` (Appium/Maestro) — sandbox นี้ไม่มี Android/iOS emulator หรือ Appium server ต่ออยู่ ต้องมี device/emulator จริงถึงจะเทสแบบไม่ mock ได้ตาม philosophy เดียวกับที่ทำกับ browser ไปแล้ว
+- `test_api_integration.py` — รันกับ HTTP server จริง (Python stdlib `http.server`, ไม่ mock) ผ่าน real socket จริง: GET/POST พร้อม JSON body จริง, 401/404/500 response จริง, custom header จริง, และ `api.load_test` รัน **k6 binary จริง** (มีติดตั้งใน sandbox นี้) ยิง load test จริงใส่ server เดียวกัน ทั้งเคส success และเคสที่ endpoint คืน error ทุก request
+
+ยังไม่ครอบคลุม: `adapters/mobile.py` (Appium/Maestro) — sandbox นี้ไม่มี Android/iOS emulator หรือ Appium server ต่ออยู่ ต้องมี device/emulator จริงถึงจะเทสแบบไม่ mock ได้ตาม philosophy เดียวกับที่ทำกับ browser/API ไปแล้ว
 
 ### บั๊กจริงที่เจอจากการรัน end-to-end workflow ทั้งระบบ (แก้แล้ว)
 
