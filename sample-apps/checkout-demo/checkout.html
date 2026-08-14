@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head><title>Checkout Demo</title></head>
+<body>
+  <h1>Checkout</h1>
+  <form id="checkout-form">
+    <input id="email" type="email" placeholder="email" />
+    <input id="amount" type="number" placeholder="amount" />
+    <input id="coupon_code" type="text" placeholder="coupon code (optional)" />
+    <button id="submit" type="button" onclick="submitOrder()">Place Order</button>
+  </form>
+  <div id="result"></div>
+  <script>
+    async function submitOrder() {
+      const email = document.getElementById("email").value;
+      const amount = parseFloat(document.getElementById("amount").value);
+      const coupon_code = document.getElementById("coupon_code").value || null;
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, amount, coupon_code }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById("result").innerText = "Order placed! Total: " + data.total;
+      } else {
+        document.getElementById("result").innerText = "Error: " + data.error;
+      }
+    }
+  </script>
+</body>
+</html>

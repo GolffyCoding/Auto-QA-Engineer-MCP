@@ -72,6 +72,14 @@ async def main():
 asyncio.run(main())
 ```
 
+**Want to see it work against something real before wiring it into your own project?**
+
+```bash
+python3 sample-apps/checkout-demo/run_demo.py
+```
+
+Runs the full pipeline — scan, generate a 29-case deterministic test suite from 4 fields and 1 business rule, execute 5 real tests (real headless-Chromium browser test, real API calls, real SQLite integrity check) against a tiny sample app with two intentional bugs, and produce a full HTML report with an executive risk summary. Takes under a minute, no extra setup. See [`sample-apps/checkout-demo/README.md`](sample-apps/checkout-demo/README.md) for exactly what it demonstrates.
+
 ---
 
 ## The pipeline

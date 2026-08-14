@@ -7,3 +7,5 @@ qa-mcp-state.json.lock
 reports/
 test-artifacts/
 .venv/
+sample-apps/checkout-demo/checkout.db
+sample-apps/checkout-demo/generated-test-cases.json
