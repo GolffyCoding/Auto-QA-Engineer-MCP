@@ -142,22 +142,25 @@ If the agent calls `test.generate` with no dimensions and the feature isn't `"lo
 
 ## Framework support
 
-`browser.*` tools all take the same `framework` parameter — swap engines without changing how you call them:
+Not just browser — four categories of tools, each with its own `*.*` prefix. Within a category, the underlying engine is just a `framework` parameter; swap it without changing how you call the tool.
 
-| Framework | `framework=` | Requires |
-|---|---|---|
-| Playwright | `"playwright"` (default) | `playwright install` |
-| Selenium | `"selenium"` | Chrome + ChromeDriver |
-| Robot Framework | `"robot"` | Chrome (via `SeleniumLibrary` directly, no `.robot` files needed) |
-| Cypress | `"cypress"` | Node.js + `npx` |
+| Category | Tools | Engine | `framework=` | Requires |
+|---|---|---|---|---|
+| **Browser** | `browser.open` / `.click` / `.fill` / `.screenshot` / `.assert` / `.close` | Playwright | `"playwright"` (default) | `playwright install` |
+| | | Selenium | `"selenium"` | Chrome + ChromeDriver |
+| | | Robot Framework | `"robot"` | Chrome (via `SeleniumLibrary` directly — no `.robot` files needed) |
+| | | Cypress | `"cypress"` | Node.js + `npx` |
+| **API** | `api.request` (REST) | httpx | — | nothing extra |
+| | `api.load_test` (load testing) | [k6](https://k6.io/) | — | `k6` binary (or set `QA_MCP_K6_BIN`) |
+| **Mobile** | `mobile.launch` / `.tap` / `.swipe` / `.type_text` / `.assert_element` / `.close` | Appium | `"appium"` (default) | running Appium server + a device/emulator reachable via `adb` |
+| | | Maestro | `"maestro"` | Maestro CLI + a device/emulator |
+| **Database** | `db.get_table_state` / `.check_fk_integrity` / `.query` | SQLAlchemy | — | any DB SQLAlchemy supports (Postgres, MySQL, SQLite, …) |
 
-> Cypress has no interactive session across commands, so each new action replays every prior action in the session as one spec and reruns it — correct results, but it gets slower as a session grows. For long workflows, prefer Playwright/Selenium/Robot.
+Notes:
 
-**API / load testing** — `api.request` (REST via httpx) needs nothing extra; `api.load_test` runs real [k6](https://k6.io/) load tests (needs the `k6` binary, or set `QA_MCP_K6_BIN`).
-
-**Mobile** — `mobile.*` tools support Appium (`framework="appium"`, default — needs a running Appium server + a device/emulator reachable via `adb`) and Maestro (`framework="maestro"` — needs the Maestro CLI + a device/emulator). Both were validated against a real physical Android device; see [CHANGELOG.md](CHANGELOG.md) for what that surfaced and how it was fixed.
-
-**Database validation** — `db.*` tools use SQLAlchemy (Postgres/MySQL/SQLite/anything SQLAlchemy supports) to check row state and foreign-key integrity after an E2E test, with identifier allowlisting against SQL injection through table/column names.
+- **Cypress** has no interactive session across commands, so each new action replays every prior action in the session as one spec and reruns it — correct results, but it gets slower as a session grows. For long workflows, prefer Playwright/Selenium/Robot.
+- **Appium and Maestro** were both validated against a real physical Android device; see [CHANGELOG.md](CHANGELOG.md) for what that surfaced and how it was fixed.
+- **Database** tools allowlist table/column identifiers against SQL injection and are used to verify row state and foreign-key integrity after an E2E test — not a general query tool.
 
 ---
 
