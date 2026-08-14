@@ -111,18 +111,51 @@ def test_generate_html_includes_root_cause_and_suggested_fix():
     report = ReportGenerator().generate(run)
     html = ReportGenerator().generate_html(report)
 
-    assert "Executive Summary" in html
+    assert "Defect Summary" in html
     assert "Backend sends invalid FK value" in html
     assert "Add FK validation" in html
 
 
-def test_generate_html_all_passing_has_no_top_risks_table():
+def test_generate_html_all_passing_has_no_defects_and_recommends_release():
     run = _test_run([_result("t1", "passed")])
     report = ReportGenerator().generate(run)
     html = ReportGenerator().generate_html(report)
 
-    assert "Top Risks" not in html
-    assert "No failures" in html
+    assert "No defects found" in html
+    assert "RECOMMENDED FOR RELEASE" in html
+
+
+def test_generate_html_critical_defect_blocks_release_recommendation():
+    run = _test_run([_result("t1", "failed", stderr="foreign key constraint violation")])
+    report = ReportGenerator().generate(run)
+    html = ReportGenerator().generate_html(report)
+
+    assert "NOT RECOMMENDED FOR RELEASE" in html
+
+
+def test_generate_includes_document_control_metadata():
+    run = _test_run([_result("t1", "passed")])
+    report = ReportGenerator().generate(
+        run, project_name="Acme Checkout", version="2.4.1",
+        prepared_by="QA Team", test_environment="Staging - Chrome 120",
+        reviewers=["QA Lead", "Engineering Manager"],
+    )
+    html = ReportGenerator().generate_html(report)
+
+    assert report["document_control"]["project_name"] == "Acme Checkout"
+    assert "Acme Checkout" in html
+    assert "2.4.1" in html
+    assert "Staging - Chrome 120" in html
+    assert "QA Lead" in html
+    assert "Engineering Manager" in html
+
+
+def test_generate_document_control_has_sensible_defaults_when_unset():
+    run = _test_run([_result("t1", "passed")])
+    report = ReportGenerator().generate(run)
+
+    assert report["document_control"]["project_name"] == "checkout-suite"
+    assert report["document_control"]["test_environment"] is None
 
 
 def test_error_status_counted_as_failure_for_risk_purposes():

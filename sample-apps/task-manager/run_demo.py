@@ -94,9 +94,16 @@ async def main():
         print(f"   [{icon}] {test_id}")
     print()
 
-    html_report = await s.call("report.generate_html", run_id=run_id)
-    pdf_report = await s.call("report.generate_pdf", run_id=run_id)
-    report = await s.call("report.generate", run_id=run_id)
+    report_meta = dict(
+        project_name="Task Manager (internal tool)",
+        version="0.1.0-demo",
+        prepared_by="qa_mcp (automated) - sample-apps/task-manager/run_demo.py",
+        test_environment=f"Local demo - {APP_URL}, headless Chromium, SQLite-free in-memory app",
+        reviewers=["QA Lead", "Engineering Manager"],
+    )
+    html_report = await s.call("report.generate_html", run_id=run_id, **report_meta)
+    pdf_report = await s.call("report.generate_pdf", run_id=run_id, **report_meta)
+    report = await s.call("report.generate", run_id=run_id, **report_meta)
 
     print("6. report.generate_html ->", html_report["path"])
     print("   report.generate_pdf  ->", pdf_report["path"])

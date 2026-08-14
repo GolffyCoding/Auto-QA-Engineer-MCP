@@ -201,24 +201,35 @@ Notes:
 
 ---
 
-## Reporting: built to hand to a stakeholder, not just a CI dashboard
+## Reporting: a real Test Summary Report, not a CI dashboard
+
+`report.generate`/`report.generate_html`/`report.generate_pdf` produce an actual **Test Summary Report** — the document shape a QA team files or sends, not a bare pass/fail table:
+
+1. **Document control** — project/system under test, report version, prepared by, status, test environment
+2. **Introduction & scope** — what was tested, how many cases, which categories
+3. **Test summary** — total/passed/failed/errors/skipped, pass rate, duration
+4. **Defect summary** — counts by severity, with a one-line risk headline
+5. **Detailed test results** — every test executed, not just the failures
+6. **Defect details** — every failure with a real category, root cause, and suggested fix, auto-diagnosed through the same classification engine `failure_analysis` uses (no separate `failure.inspect` call needed)
+7. **Recommendation** — a deterministic go/no-go call: `RECOMMENDED FOR RELEASE` / `CONDITIONAL` / `NOT RECOMMENDED FOR RELEASE`, driven by the worst severity present (`database`/`auth`/`security` failures are Critical and always block; `api`/`logic`/`concurrency` are High and also block; everything else is Medium/Low and release-conditional)
+8. **Sign-off** — a blank Name/Date row per reviewer you specify, ready to print and sign
 
 ```python
 run = await session.call_tool("test.create_run", {"suite_name": "checkout-suite"})
 await session.call_tool("test.run", {"test_id": "t1", "command": ["pytest", "test_login.py"]})
 await session.call_tool("test.run", {"test_id": "t2", "command": ["pytest", "test_checkout.py"]})
-report = await session.call_tool("report.generate_html", {"run_id": run_id})
+report = await session.call_tool("report.generate_html", {
+    "run_id": run_id,
+    "project_name": "Acme Checkout",
+    "version": "2.4.1",
+    "prepared_by": "QA Team",
+    "test_environment": "Staging - Chrome 120, Ubuntu 22.04",
+    "reviewers": ["QA Lead", "Engineering Manager"],
+})
 # -> {"report_id": "...", "path": "./reports/report-....html", "summary": {...}, "executive_summary": {...}}
 ```
 
-Every failed test in the report is automatically run through the same classification engine `failure_analysis` uses — you don't have to call `failure.inspect` yourself first. Each one gets a real category (one of 15, from `database` to `security` to `logic`), a specific root cause, and a suggested fix, instead of a bare error string.
-
-The report also carries a **deterministic executive summary** — no LLM-authored prose, just fixed templates over real classification data — meant for someone who doesn't have time to read every test result:
-
-- A one-line headline: *"2 of 10 tests failing (80% pass rate), 1 Critical — risk level: Critical."*
-- A `risk_level` (`None` / `Medium` / `High` / `Critical`) driven by the worst failure category present — a `database`/`auth`/`security` failure is Critical, `api`/`logic`/`concurrency` is High, everything else is Medium
-- Failures broken down by severity and by category
-- The top 5 risks worth looking at first, sorted by severity
+All five metadata fields are optional — omit them and the report still generates with sensible defaults (project name falls back to the suite name, etc.).
 
 `report.generate_html` writes a self-contained HTML file to `./reports/` — open it straight in a browser. **`report.generate_pdf`** renders that same report to a real PDF (via headless Chromium print-to-PDF, not a screenshot — proper page breaks, A4, print-safe colors) so you have something you can actually email, attach to a ticket, or file as a dated record without converting anything yourself.
 

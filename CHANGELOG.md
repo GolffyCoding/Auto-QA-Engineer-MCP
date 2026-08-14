@@ -2,6 +2,16 @@
 
 Detailed record of real bugs found and fixed while building out test coverage and validating this project end-to-end (unit tests, full workflow runs, and real hardware/network validation). Kept separate from `README.md` so the README stays focused on how to use the project rather than how it was hardened.
 
+## Reports weren't a real Test Summary Report
+
+Feedback (with a reference example, a StrongQA test report template) that the generated report still wasn't something a QA team could actually use as-is: no document control section, no scope statement, no test environment record, no formal defect ID scheme, no release recommendation, no sign-off block - a nicer-looking CI dashboard, not the document shape a real QA team files or sends.
+
+Restructured `ReportGenerator.generate()`/`generate_html()` into an actual Test Summary Report: document control (project/system under test, version, prepared by, status, test environment), an introduction/scope statement, a full test summary (now including a `skipped` count that was silently missing before), a formal defect table with `DEF-NNN` IDs, every executed test listed (not just failures), a deterministic go/no-go **recommendation** derived from the worst severity present, and a **sign-off** block with a blank Name/Date row per reviewer specified. All of it is optional metadata (`project_name`, `version`, `prepared_by`, `test_environment`, `reviewers`) with sensible defaults, so existing callers that don't pass any of it still work.
+
+Caught a real rendering bug while visually reviewing the redesigned PDF output (converted to PNG and inspected page by page): the new document-control table's header cells inherited `color: white` from the generic `th` rule while sitting on a light-grey (`#eee`) background - unreadable in the rendered PDF/HTML. Fixed by setting an explicit `color` on `.doc-control th`. Undetectable from HTML string assertions alone; only visual inspection of the actual rendered output caught it.
+
+3 new/updated tests in `tests/test_reporter.py`. 144 tests total.
+
 ## Company customization: a whole subsystem existed but was dead code
 
 Prompted by feedback that there was no `.env.example`, no way to customize the LLM's instructions/role, and no way to teach the tool company-specific conventions. Turned up that `qa_mcp/knowledge/base.py` already had a `KnowledgeBase` class built for exactly this - project rules, failure patterns, team decisions - but it was **never registered as an MCP tool anywhere** (not in `mcp_server.py`'s CLI table, not in `server.py`'s real tool table) and nothing else in the codebase referenced it except a stray comment. A company could not have used it no matter how they tried; there was no way in.
