@@ -54,11 +54,23 @@ class AppiumAdapter(MobileAdapter):
         platform_name: str = "Android",
         automation_name: str = "UiAutomator2",
         device_name: Optional[str] = None,
+        app_activity: Optional[str] = None,
+        capabilities: Optional[Dict[str, Any]] = None,
     ):
         self.server_url = server_url
         self.platform_name = platform_name
         self.automation_name = automation_name
         self.device_name = device_name
+        # ".MainActivity" เป็นแค่ default ที่ใช้ได้กับแอปส่วนน้อยเท่านั้น - แอป
+        # จริงส่วนใหญ่ (รวมถึงระบบแอปอย่าง Settings) ใช้ชื่อ activity อื่น
+        # ต้องมีทางกำหนดเองได้ ไม่งั้น launch() จะ fail กับแอปส่วนใหญ่ในโลกจริง
+        self.app_activity = app_activity
+        # capability เพิ่มเติมที่จำเป็นจริงบนอุปกรณ์บางรุ่น/บาง OEM (เช่น
+        # ColorOS/OPPO/Realme ที่ block WRITE_SECURE_SETTINGS หรือ block
+        # `pm clear` บนแอประบบ) - ทดสอบจริงกับ CPH1819 (Android 10) เจอว่า
+        # ต้องใช้ทั้ง appium:ignoreHiddenApiPolicyError และ appium:noReset
+        # ถึงจะสร้าง session ผ่าน ไม่งั้น session ตายตั้งแต่ createSession
+        self.capabilities = capabilities or {}
         self._driver = None
 
     def _build_options(self, app_id: str):
@@ -66,7 +78,7 @@ class AppiumAdapter(MobileAdapter):
             from appium.options.android import UiAutomator2Options
             options = UiAutomator2Options()
             options.app_package = app_id
-            options.app_activity = ".MainActivity"
+            options.app_activity = self.app_activity or ".MainActivity"
         else:
             from appium.options.ios import XCUITestOptions
             options = XCUITestOptions()
@@ -76,6 +88,8 @@ class AppiumAdapter(MobileAdapter):
         options.platform_name = self.platform_name
         if self.device_name:
             options.device_name = self.device_name
+        for key, value in self.capabilities.items():
+            options.set_capability(key, value)
         return options
 
     async def launch(self, app_id: str) -> Dict[str, Any]:

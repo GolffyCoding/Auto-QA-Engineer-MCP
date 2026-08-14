@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-active--development-orange)
-![Tests](https://img.shields.io/badge/tests-100%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-105%20passing-brightgreen)
 
 ---
 
@@ -361,7 +361,17 @@ python -m pytest tests/ -v
 
 - `test_api_integration.py` — รันกับ HTTP server จริง (Python stdlib `http.server`, ไม่ mock) ผ่าน real socket จริง: GET/POST พร้อม JSON body จริง, 401/404/500 response จริง, custom header จริง, และ `api.load_test` รัน **k6 binary จริง** (มีติดตั้งใน sandbox นี้) ยิง load test จริงใส่ server เดียวกัน ทั้งเคส success และเคสที่ endpoint คืน error ทุก request
 
-ยังไม่ครอบคลุม: `adapters/mobile.py` (Appium/Maestro) — sandbox นี้ไม่มี Android/iOS emulator หรือ Appium server ต่ออยู่ ต้องมี device/emulator จริงถึงจะเทสแบบไม่ mock ได้ตาม philosophy เดียวกับที่ทำกับ browser/API ไปแล้ว
+- `test_mobile_adapter.py` — unit test แบบ device-independent สำหรับ `AppiumAdapter._build_options()` (ดูหัวข้อ "ทดสอบกับมือถือจริง" ด้านล่างสำหรับสิ่งที่ยืนยันแล้วบนอุปกรณ์จริง)
+
+### ทดสอบกับมือถือจริง (Appium ต่อ Android device จริงผ่าน adb)
+
+ต่ออุปกรณ์ Android จริง (OPPO/Realme CPH1819, Android 10) ผ่าน `adb`, ติดตั้ง Appium `uiautomator2` driver, รัน Appium server จริง แล้วสั่ง `AppiumAdapter` ของ `qa_mcp` ตรง ๆ (ไม่ผ่าน mock) เจอบั๊กจริง 1 ตัวที่ต้องแก้ก่อนถึงจะใช้กับอุปกรณ์จริง/แอปจริงได้:
+
+**`app_activity` เดิม hardcode เป็น `.MainActivity` เสมอ ไม่มีทางกำหนดเองได้** — แอปจริงส่วนใหญ่ (รวมถึงระบบแอปอย่าง Settings ที่ launch activity จริงคือ `.Settings`) ไม่ได้ใช้ชื่อนี้ `launch()` จึง fail กับแอปเกือบทั้งหมดในโลกจริง แก้โดยเพิ่ม constructor param `app_activity` (ยัง default เป็น `.MainActivity` เหมือนเดิมถ้าไม่ระบุ — ไม่ breaking change) พร้อมเพิ่ม `capabilities: Dict` สำหรับส่ง Appium capability เพิ่มเติมที่จำเป็นกับอุปกรณ์บาง OEM (เช่นอุปกรณ์ที่ทดสอบจริงนี้ต้องมีทั้ง `appium:ignoreHiddenApiPolicyError` และ `appium:noReset` ไม่งั้น session สร้างไม่ผ่านเพราะ ColorOS บล็อก `WRITE_SECURE_SETTINGS`/`pm clear` บนแอประบบ — เป็นข้อจำกัดของ OEM ไม่ใช่บั๊กของ Appium/qa_mcp)
+
+หลังแก้แล้ว ยืนยันบนอุปกรณ์จริงว่าใช้งานได้จริงครบ: `launch()` เปิดแอป Settings จริงสำเร็จ, `assert_element()` ตรวจ element จริงถูกต้องทั้งเคส found/not-found, `tap()` คลิก element จริงแล้ว UI เปลี่ยนจริง, `swipe()` สั่ง gesture จริงสำเร็จ, `close()` ปิด session สะอาด — ยืนยันว่า `AppiumAdapter` ไม่ใช่ stub และทำงานกับ infrastructure จริงตามที่ README เคยอ้างไว้ (การทดสอบจริงนี้เป็น manual validation ในอุปกรณ์เฉพาะของ sandbox นี้ ไม่ได้ผูกเข้า automated test suite เพราะอุปกรณ์จริงจะไม่มีอยู่ใน environment อื่น/CI)
+
+ยังไม่ได้ทดสอบ: `MaestroAdapter` กับอุปกรณ์จริง (Maestro CLI มีติดตั้งแล้วใน sandbox นี้แต่ยังไม่ได้ลอง)
 
 ### บั๊กจริงที่เจอจากการรัน end-to-end workflow ทั้งระบบ (แก้แล้ว)
 
