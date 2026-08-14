@@ -170,6 +170,14 @@ class K6Adapter(APIAdapter):
     ให้ใช้ `run_load_test()` โดยตรง (ต่อกับ tool `api.load_test`)
     """
 
+    # test_type -> k6 execution pattern, per StrongQA's performance-testing
+    # taxonomy (https://strongqa.com/qa-portal/knowledge-base/testing-types/performance-testing):
+    #   load      - flat vus/duration at the expected volume (default, unchanged behavior)
+    #   stress    - ramps well beyond `vus` in stages to find the breaking point
+    #   stability - a much longer, flat run (endurance/soak) to catch leaks/degradation
+    #   spike     - a short, sudden burst far above `vus` then back down
+    VALID_TEST_TYPES = {"load", "stress", "stability", "soak", "spike"}
+
     def __init__(self, k6_bin: Optional[str] = None):
         self._k6_bin = k6_bin or _find_k6_binary()
 
@@ -182,24 +190,41 @@ class K6Adapter(APIAdapter):
         iterations: Optional[int] = None,
         headers: Optional[Dict] = None,
         body: Optional[Any] = None,
+        test_type: str = "load",
     ) -> Dict[str, Any]:
-        """รัน k6 load test จริงกับ url ที่กำหนด แล้วคืนสถิติจริงจาก k6"""
-        if not duration and not iterations:
+        """รัน k6 load test จริงกับ url ที่กำหนด แล้วคืนสถิติจริงจาก k6
+
+        test_type: "load" (default) | "stress" | "stability"/"soak" | "spike"
+        - นอกจาก "load" ทุกแบบใช้ k6 `options.stages` แทน CLI --vus/--duration/
+          --iterations (k6 ต้องกำหนด stage ผ่าน script ไม่ใช่ CLI flag) ดู
+          knowledge.get_testing_type สำหรับคำนิยามของแต่ละแบบ
+        """
+        test_type = test_type.lower()
+        if test_type not in self.VALID_TEST_TYPES:
+            raise ValueError(f"Unknown test_type {test_type!r} - expected one of {sorted(self.VALID_TEST_TYPES)}")
+        test_type = "stability" if test_type == "soak" else test_type
+
+        if test_type == "load" and not duration and not iterations:
             iterations = 1
 
-        script = self._build_script(url, method, headers, body)
+        script = self._build_script(url, method, headers, body, test_type=test_type, vus=vus, duration=duration)
 
         with tempfile.TemporaryDirectory(prefix="qa-mcp-k6-") as tmpdir:
             script_path = Path(tmpdir) / "script.js"
             summary_path = Path(tmpdir) / "summary.json"
             script_path.write_text(script)
 
-            args = [self._k6_bin, "run", "--vus", str(vus),
-                    "--summary-export", str(summary_path)]
-            if duration:
-                args += ["--duration", duration]
-            if iterations:
-                args += ["--iterations", str(iterations)]
+            args = [self._k6_bin, "run", "--summary-export", str(summary_path)]
+            if test_type == "load":
+                # unchanged from before test_type existed: plain flat run via CLI flags
+                args += ["--vus", str(vus)]
+                if duration:
+                    args += ["--duration", duration]
+                if iterations:
+                    args += ["--iterations", str(iterations)]
+            # stress/stability/spike control vus/duration entirely via the
+            # script's `options.stages` (or `options.vus`+`options.duration`
+            # for stability) - k6 doesn't support staged ramps as CLI flags
             args.append(str(script_path))
 
             proc = await asyncio.create_subprocess_exec(
@@ -207,7 +232,7 @@ class K6Adapter(APIAdapter):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=600 if test_type == "stability" else 120)
 
             # k6 exits non-zero when thresholds fail - ยังอ่าน summary ได้ตามปกติ
             summary: Dict[str, Any] = {}
@@ -220,6 +245,7 @@ class K6Adapter(APIAdapter):
             http_reqs = metrics.get("http_reqs", {})
 
             return {
+                "test_type": test_type,
                 "vus": vus,
                 "duration": duration,
                 "iterations": iterations,
@@ -237,13 +263,55 @@ class K6Adapter(APIAdapter):
             }
 
     @staticmethod
-    def _build_script(url: str, method: str, headers: Optional[Dict], body: Optional[Any]) -> str:
-        """สร้าง k6 script (JS) แบบ inline สำหรับยิง request เดียวซ้ำตาม vus/iterations ที่กำหนด"""
+    def _stages_for(test_type: str, vus: int, duration: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+        """k6 `options.stages` สำหรับแต่ละ test_type - None แปลว่าใช้ CLI flag แทน
+        (เฉพาะ "load") ตัวเลขในแต่ละ stage มาจากคำนิยามจริงของแต่ละ testing
+        type (ดู qa_mcp.knowledge.concepts.TESTING_TYPES):
+        - stress: ไต่ระดับเกิน vus ที่ขอมาเรื่อย ๆ (2x, 3x) เพื่อหาจุดที่ระบบพัง
+        - spike: พุ่งขึ้นสูงมาก (5x) แบบทันทีในช่วงสั้น ๆ แล้วลดกลับ
+        """
+        if test_type == "stress":
+            # ต้องรวมกันสั้นกว่า subprocess timeout ด้านล่าง (120s) มาก
+            # พอที่จะเหลือ headroom ให้ k6 startup + summary export - ทดสอบจริง
+            # แล้วว่า stage รวม 3 นาทีตามที่ตั้งไว้แต่แรกชน timeout เดิมพอดี
+            return [
+                {"duration": "10s", "target": vus},
+                {"duration": "15s", "target": vus * 2},
+                {"duration": "15s", "target": vus * 3},
+                {"duration": "10s", "target": 0},
+            ]
+        if test_type == "spike":
+            return [
+                {"duration": "10s", "target": vus},
+                {"duration": "10s", "target": vus * 5},
+                {"duration": "10s", "target": vus},
+                {"duration": "10s", "target": 0},
+            ]
+        return None
+
+    @classmethod
+    def _build_script(
+        cls, url: str, method: str, headers: Optional[Dict], body: Optional[Any],
+        test_type: str = "load", vus: int = 1, duration: Optional[str] = None,
+    ) -> str:
+        """สร้าง k6 script (JS) แบบ inline - สำหรับ "load" ไม่มี `options` block
+        เลย (CLI flag คุมทั้งหมด เหมือนพฤติกรรมเดิมก่อนมี test_type) ส่วนแบบอื่น
+        ฝัง `export const options` ที่กำหนด stage/duration ตรงตาม test_type
+        """
         params = {"method": method.upper(), "headers": headers or {}}
         payload = json.dumps(body) if body is not None else "undefined"
+
+        options_block = ""
+        stages = cls._stages_for(test_type, vus, duration)
+        if stages is not None:
+            options_block = f"export const options = {{ stages: {json.dumps(stages)} }};\n"
+        elif test_type == "stability":
+            options_block = f"export const options = {{ vus: {vus}, duration: {json.dumps(duration or '10m')} }};\n"
+
         return (
             "import http from 'k6/http';\n"
             "import { check } from 'k6';\n"
+            f"{options_block}"
             f"const URL = {json.dumps(url)};\n"
             f"const PARAMS = {json.dumps(params)};\n"
             f"const BODY = {payload};\n"
@@ -308,10 +376,18 @@ async def api_load_test(
     iterations: Optional[int] = None,
     headers: Optional[Dict] = None,
     body: Optional[Any] = None,
+    test_type: str = "load",
 ) -> Dict[str, Any]:
-    """MCP tool: api.load_test - รัน k6 load test จริง (ต้องมี k6 ติดตั้งในเครื่อง)"""
+    """MCP tool: api.load_test - รัน k6 load test จริง (ต้องมี k6 ติดตั้งในเครื่อง)
+
+    test_type: "load" (default - flat vus at expected volume) | "stress"
+    (ramps well beyond vus to find the breaking point) | "stability"/"soak"
+    (long flat run to catch leaks/degradation - overrides duration to 10m
+    if not given) | "spike" (short sudden burst to 5x vus then back down).
+    เรียก knowledge.get_testing_type("stress") เป็นต้น เพื่อดูคำนิยามเต็ม
+    """
     adapter = K6Adapter()
     return await adapter.run_load_test(
         url=url, method=method, vus=vus, duration=duration,
-        iterations=iterations, headers=headers, body=body,
+        iterations=iterations, headers=headers, body=body, test_type=test_type,
     )

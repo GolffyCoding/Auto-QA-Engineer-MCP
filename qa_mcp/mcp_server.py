@@ -99,6 +99,12 @@ class QAMCPServer:
             "knowledge.get_similar_failures": "qa_mcp.knowledge.base.knowledge_get_similar_failures",
             "knowledge.add_decision": "qa_mcp.knowledge.base.knowledge_add_decision",
             "knowledge.get_decisions": "qa_mcp.knowledge.base.knowledge_get_decisions",
+
+            # Phase 11: QA Reference Concepts (general theory, not project-specific)
+            "knowledge.get_concept": "qa_mcp.knowledge.concepts.knowledge_get_concept",
+            "knowledge.list_concepts": "qa_mcp.knowledge.concepts.knowledge_list_concepts",
+            "knowledge.get_testing_type": "qa_mcp.knowledge.concepts.knowledge_get_testing_type",
+            "knowledge.list_testing_types": "qa_mcp.knowledge.concepts.knowledge_list_testing_types",
         }
 
     async def call(self, tool_name: str, **kwargs) -> Dict[str, Any]:

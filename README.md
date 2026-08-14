@@ -6,7 +6,7 @@ The core idea: **the LLM should never be the one deciding what counts as a compl
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-141%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-157%20passing-brightgreen)
 ![Validated](https://img.shields.io/badge/validated-real%20browser%20%7C%20real%20network%20%7C%20real%20device-informational)
 
 ---
@@ -188,7 +188,9 @@ Not just browser — four categories of tools, each with its own `*.*` prefix. W
 | | | Robot Framework | `"robot"` | Chrome (via `SeleniumLibrary` directly — no `.robot` files needed) |
 | | | Cypress | `"cypress"` | Node.js + `npx` |
 | **API** | `api.request` (REST) | httpx | — | nothing extra |
-| | `api.load_test` (load testing) | [k6](https://k6.io/) | — | `k6` binary (or set `QA_MCP_K6_BIN`) |
+| | `api.load_test` (load testing) | [k6](https://github.com/grafana/k6) | — | `k6` binary (or set `QA_MCP_K6_BIN`) |
+
+`api.load_test` takes a `test_type`: `"load"` (default — flat VUs at the expected volume), `"stress"` (ramps well beyond the requested VUs in stages to find the breaking point), `"stability"`/`"soak"` (a long, flat, sustained run to catch leaks/degradation), or `"spike"` (a short, sudden burst to 5× VUs then back down) — each is a real k6 execution pattern (staged `options`, not just a different flag), matching the [StrongQA performance-testing taxonomy](https://strongqa.com/qa-portal/knowledge-base/testing-types/performance-testing). Call `knowledge.get_testing_type("stress")` for the full definition of any of these before choosing one.
 | **Mobile** | `mobile.launch` / `.tap` / `.swipe` / `.type_text` / `.assert_element` / `.close` | Appium | `"appium"` (default) | running Appium server + a device/emulator reachable via `adb` |
 | | | Maestro | `"maestro"` | Maestro CLI + a device/emulator |
 | **Database** | `db.get_table_state` / `.check_fk_integrity` / `.query` | SQLAlchemy | — | any DB SQLAlchemy supports (Postgres, MySQL, SQLite, …) |
@@ -292,6 +294,7 @@ Every bug this hardening pass found — a silent data-loss bug in the persistenc
 | 8 | `core.reporter` | JSON/HTML reporting |
 | 9 | `analyzers.database_analyzer` | Post-test database state verification |
 | 10 | `knowledge` | Company/project conventions and failure patterns that persist across sessions — see [Customizing for your company](#customizing-for-your-company) |
+| 11 | `knowledge.concepts` | Grounded QA reference definitions (testing theory, testing types) an agent can look up instead of guessing — see below |
 
 Run `qa-mcp --list-tools` for the full list of registered tools with their implementing function paths.
 
@@ -366,6 +369,20 @@ await session.call_tool("knowledge.add_decision", {
 ```
 
 Every `knowledge.add_rule` call persists through the same `QA_MCP_STATE_DB` store as everything else, and — unlike the failure patterns and decisions, which an agent looks up on demand via `knowledge.get_similar_failures`/`knowledge.get_decisions` — saved rules are folded automatically into the instructions every future `qa-mcp-serve` session sees, the same way the conventions file is. Add a rule once; every agent that connects after that already knows it.
+
+---
+
+## QA reference concepts
+
+Separate from your own conventions above, `knowledge.get_concept`/`knowledge.list_concepts` and `knowledge.get_testing_type`/`knowledge.list_testing_types` give an agent grounded definitions of general QA theory instead of letting it guess — content adapted from [StrongQA's QA knowledge base](https://strongqa.com/qa-portal/knowledge-base):
+
+- **Key concepts**: Software Testing, Testing vs QA vs QC, Testing vs Debugging, Verification vs Validation, Testing Documentation (test plan/test case/test scenario/traceability matrix), Myths about QA
+- **Testing types**: Functional, Performance, Load, Stress, Stability — the same taxonomy `api.load_test`'s `test_type` parameter implements as real k6 execution patterns (see [Framework support](#framework-support))
+
+```python
+await session.call_tool("knowledge.get_concept", {"topic": "verification_vs_validation"})
+await session.call_tool("knowledge.get_testing_type", {"type_name": "stress"})
+```
 
 ---
 

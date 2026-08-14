@@ -55,6 +55,12 @@ from qa_mcp.knowledge.base import (
     knowledge_add_decision,
     knowledge_get_decisions,
 )
+from qa_mcp.knowledge.concepts import (
+    knowledge_get_concept,
+    knowledge_list_concepts,
+    knowledge_get_testing_type,
+    knowledge_list_testing_types,
+)
 from qa_mcp.failure_analysis.analyzer import (
     failure_inspect,
     failure_classify,
@@ -173,6 +179,11 @@ TOOLS = {
     "knowledge.get_similar_failures": knowledge_get_similar_failures,
     "knowledge.add_decision": knowledge_add_decision,
     "knowledge.get_decisions": knowledge_get_decisions,
+    # Phase 11: QA Reference Concepts (general theory, not project-specific)
+    "knowledge.get_concept": knowledge_get_concept,
+    "knowledge.list_concepts": knowledge_list_concepts,
+    "knowledge.get_testing_type": knowledge_get_testing_type,
+    "knowledge.list_testing_types": knowledge_list_testing_types,
 }
 
 _BASE_INSTRUCTIONS = (

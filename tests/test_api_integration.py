@@ -146,3 +146,47 @@ async def test_api_load_test_reports_failures_for_error_endpoint(live_server):
     # the run itself still completes and reports it - not a crash.
     assert result["requests"] == 2
     assert result["failed_rate"] in (0, None) or result["failed_rate"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_api_load_test_stress_type_ramps_via_real_k6_stages(live_server):
+    """test_type="stress" must actually drive k6 through staged VU ramping
+    (not just the flat --vus/--duration CLI path "load" uses) - verified
+    against a real k6 run, not by inspecting the generated script text.
+    """
+    result = await api_load_test(url=f"{live_server}/users/1", method="GET", vus=1, test_type="stress")
+    assert result["exit_code"] == 0
+    assert result["test_type"] == "stress"
+    assert result["requests"] > 0
+
+
+@pytest.mark.asyncio
+async def test_api_load_test_spike_type_runs_real_k6_stages(live_server):
+    result = await api_load_test(url=f"{live_server}/users/1", method="GET", vus=1, test_type="spike")
+    assert result["exit_code"] == 0
+    assert result["test_type"] == "spike"
+    assert result["requests"] > 0
+
+
+@pytest.mark.asyncio
+async def test_api_load_test_stability_type_runs_a_sustained_real_k6_run(live_server):
+    result = await api_load_test(
+        url=f"{live_server}/users/1", method="GET", vus=1, duration="3s", test_type="stability",
+    )
+    assert result["exit_code"] == 0
+    assert result["test_type"] == "stability"
+    assert result["requests"] > 0
+
+
+@pytest.mark.asyncio
+async def test_api_load_test_soak_is_an_alias_for_stability(live_server):
+    result = await api_load_test(
+        url=f"{live_server}/users/1", method="GET", vus=1, duration="2s", test_type="soak",
+    )
+    assert result["test_type"] == "stability"
+
+
+@pytest.mark.asyncio
+async def test_api_load_test_rejects_unknown_test_type(live_server):
+    with pytest.raises(ValueError):
+        await api_load_test(url=f"{live_server}/users/1", test_type="bogus")

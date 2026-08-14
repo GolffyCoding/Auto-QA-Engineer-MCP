@@ -2,6 +2,18 @@
 
 Detailed record of real bugs found and fixed while building out test coverage and validating this project end-to-end (unit tests, full workflow runs, and real hardware/network validation). Kept separate from `README.md` so the README stays focused on how to use the project rather than how it was hardened.
 
+## QA reference concepts + real Stress/Stability/Spike load testing
+
+Asked to bring StrongQA's QA knowledge base (Key Concepts + Testing Types) into the project. Fetched the actual page content (not summarized from memory) for six Key Concepts (Software Testing, Testing/QA/QC, Testing vs Debugging, Verification vs Validation, Testing Documentation, Myths about QA) and five Testing Types (Functional, Performance, Load, Stress, Stability), and added two things:
+
+1. **`qa_mcp/knowledge/concepts.py`** - grounded static reference data (not a document dump) exposed as `knowledge.get_concept`/`.list_concepts`/`.get_testing_type`/`.list_testing_types`, so an agent can look up an accurate definition instead of guessing/hallucinating QA theory. Registered in both the CLI dispatch table and the real server's `TOOLS` dict (the sync-check test added earlier caught nothing missing this time - it did its job).
+
+2. **`api.load_test` gained a real `test_type` parameter** (`"load"` / `"stress"` / `"stability"`/`"soak"` / `"spike"`), each a genuine k6 execution pattern via `options.stages` (staged VU ramps), not just a label - `"load"` (default) is byte-identical to the old behavior for backward compatibility, `"stress"` ramps to 3x the requested VUs, `"spike"` bursts to 5x briefly, `"stability"` holds a flat load for a long duration (default 10 minutes if none given).
+
+**Found and fixed a real bug while testing the new `"stress"` mode against a live k6 run**: the first draft's stress stages summed to 3 minutes, but the subprocess wait timeout was still 120 seconds inherited from the old flat-load code path - every stress test would guaranteed a `TimeoutError`. Caught by actually running it end to end against a real local server rather than just asserting on the generated script text; shortened the default stress/spike stage durations so a default run comfortably fits inside the existing timeout.
+
+7 new tests (`test_knowledge_concepts.py`, 5 new in `test_api_integration.py` exercising all four `test_type` values against real k6). 157 tests total - the full suite now takes ~2 minutes instead of ~30 seconds, since the new stress/spike/stability tests each run a real, if short, k6 load pattern rather than a single request.
+
 ## Reports weren't a real Test Summary Report
 
 Feedback (with a reference example, a StrongQA test report template) that the generated report still wasn't something a QA team could actually use as-is: no document control section, no scope statement, no test environment record, no formal defect ID scheme, no release recommendation, no sign-off block - a nicer-looking CI dashboard, not the document shape a real QA team files or sends.
