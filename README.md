@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-active--development-orange)
-![Tests](https://img.shields.io/badge/tests-79%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-91%20passing-brightgreen)
 
 ---
 
@@ -357,7 +357,9 @@ python -m pytest tests/ -v
 
 `PersistentStore.save()` เดิม reassign `self._data = current` (dict ใหม่) ทุกครั้งที่ save — แต่ `namespace()` คืน reference ของ dict เดิมให้ caller ถือไว้ยาว ๆ (ทุก module เรียก `namespace()` แค่ครั้งเดียวตอน `__init__` แล้ว mutate reference นั้นตลอดอายุ process) หลัง `save()` ครั้งแรก reference นั้นหลุดออกจาก `self._data` ทันที **save() ครั้งที่สองเป็นต้นไปเขียนค่าเก่าซ้ำ ๆ ไม่เห็นการเปลี่ยนแปลงใหม่เลย** — เจอจริงตอนเทส `TestExecutor` รัน 2 test เข้า run เดียวกัน ผลลัพธ์ตัวที่สองหายจากดิสก์ กระทบทุก module ที่ persist (`TestExecutor`, `DefectTracker`, `FixEngine`, `FailureAnalyzer`) แก้แล้วโดยให้ `save()` merge เข้า dict object เดิมแบบ in-place แทนการ reassign — มี regression test (`test_repeated_save_on_same_instance_keeps_writing_new_mutations`) ยืนยันแล้ว
 
-ยังไม่ครอบคลุม: `adapters/browser.py`, `adapters/mobile.py` — ต้องมี browser/emulator จริงต่ออยู่ถึงจะเทสแบบไม่ mock ได้ (mock ก็ได้แต่จะไม่ยืนยันว่า integration จริงทำงาน ซึ่งขัดกับ philosophy ของ test suite ชุดนี้ที่เน้นรันจริงเท่าที่ทำได้)
+- `test_browser_adapter.py` — รันกับ headless Chromium จริงผ่าน Playwright (มี `playwright install` ในเครื่องนี้แล้ว) กับ static HTML fixture (`tests/fixtures/form.html`) ไม่ mock อะไรเลย: `open` ได้ title/url จริง, `fill`+`click` แก้ DOM จริงแล้วอ่านกลับได้, `assert_visible`/`assert_text` ตรวจ element ที่ซ่อน/โผล่จริงตามการโต้ตอบจริง, `screenshot` เขียนไฟล์ PNG จริงลงดิสก์ (ตรวจ magic bytes), console log ถูกจับได้จริง, และ `BrowserFactory` singleton ทำให้ `browser.open → browser.fill → browser.click → browser.assert` (4 MCP tool call แยกกัน) ใช้ browser session/page เดียวกันจริงตามที่ design ไว้
+
+ยังไม่ครอบคลุม: `adapters/mobile.py` (Appium/Maestro) — sandbox นี้ไม่มี Android/iOS emulator หรือ Appium server ต่ออยู่ ต้องมี device/emulator จริงถึงจะเทสแบบไม่ mock ได้ตาม philosophy เดียวกับที่ทำกับ browser ไปแล้ว
 
 ### บั๊กจริงที่เจอจากการรัน end-to-end workflow ทั้งระบบ (แก้แล้ว)
 

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><title>QA-MCP Test Fixture</title></head>
+<body>
+  <h1 id="heading">Checkout Form</h1>
+  <input id="name" type="text" />
+  <button id="submit" onclick="onSubmit()">Submit</button>
+  <div id="result"></div>
+  <div id="hidden" style="display:none">I am hidden</div>
+  <select id="plan">
+    <option value="free">Free</option>
+    <option value="pro">Pro</option>
+  </select>
+  <script>
+    console.log("page loaded");
+    function onSubmit() {
+      document.getElementById("result").innerText = "Hello, " + document.getElementById("name").value;
+      document.getElementById("hidden").style.display = "block";
+    }
+  </script>
+</body>
+</html>
