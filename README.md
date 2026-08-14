@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-active--development-orange)
-![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-79%20passing-brightgreen)
 
 ---
 
@@ -358,6 +358,18 @@ python -m pytest tests/ -v
 `PersistentStore.save()` เดิม reassign `self._data = current` (dict ใหม่) ทุกครั้งที่ save — แต่ `namespace()` คืน reference ของ dict เดิมให้ caller ถือไว้ยาว ๆ (ทุก module เรียก `namespace()` แค่ครั้งเดียวตอน `__init__` แล้ว mutate reference นั้นตลอดอายุ process) หลัง `save()` ครั้งแรก reference นั้นหลุดออกจาก `self._data` ทันที **save() ครั้งที่สองเป็นต้นไปเขียนค่าเก่าซ้ำ ๆ ไม่เห็นการเปลี่ยนแปลงใหม่เลย** — เจอจริงตอนเทส `TestExecutor` รัน 2 test เข้า run เดียวกัน ผลลัพธ์ตัวที่สองหายจากดิสก์ กระทบทุก module ที่ persist (`TestExecutor`, `DefectTracker`, `FixEngine`, `FailureAnalyzer`) แก้แล้วโดยให้ `save()` merge เข้า dict object เดิมแบบ in-place แทนการ reassign — มี regression test (`test_repeated_save_on_same_instance_keeps_writing_new_mutations`) ยืนยันแล้ว
 
 ยังไม่ครอบคลุม: `adapters/browser.py`, `adapters/mobile.py` — ต้องมี browser/emulator จริงต่ออยู่ถึงจะเทสแบบไม่ mock ได้ (mock ก็ได้แต่จะไม่ยืนยันว่า integration จริงทำงาน ซึ่งขัดกับ philosophy ของ test suite ชุดนี้ที่เน้นรันจริงเท่าที่ทำได้)
+
+### บั๊กจริงที่เจอจากการรัน end-to-end workflow ทั้งระบบ (แก้แล้ว)
+
+หลัง unit test ผ่านหมดแล้ว ลองรัน full workflow จริงผ่าน `QAMCPServer.call()` แบบเดียวกับที่ `qa-mcp-serve` จะทำ (scan → generate → run → diagnose → propose → approve → apply → defect → report) และรัน CLI จริงกับ repo ตัวเอง เจอบั๊ก 3 ตัวที่ unit test เดิมไม่ครอบคลุม เพราะเป็นบั๊กที่โผล่เฉพาะตอนเรียกผ่าน dynamic dispatch/JSON boundary จริง หรือตอน scan directory จริงที่มีไฟล์เยอะ:
+
+1. **`project.scan` กับ `project_path="."` คืน `name: ""` เสมอ** — `Path(".").name` เป็น empty string ทั้งที่การ scan "โปรเจกต์ปัจจุบัน" คือการใช้งานที่พบบ่อยที่สุด แก้โดย resolve เป็น absolute path ก่อนอ่าน `.name`
+
+2. **`project.scan`/`project.detect_stack` จัดว่า Python project เป็น `language: "Unknown"`** เพราะ scanner เดิมไม่กรอง `.git`/`node_modules`/`__pycache__`/`.venv` ออกจาก `rglob("*")` — ไฟล์ blob ที่ไม่มีนามสกุลใน `.git/objects` มีจำนวนมากกว่าไฟล์ `.py` จริง ทำให้ "extension ที่เจอบ่อยสุด" กลายเป็นค่าว่าง ไม่ตรงกับ language map เลย แก้โดยเพิ่ม `EXCLUDED_DIRS` และ helper `_walk()` ที่กรองออกทุกจุดที่เคยเรียก `rglob()` ตรง ๆ (กระทบ framework/auth/testing-tools/routes/endpoints/components/forms detection ทั้งหมดที่เคยเจอปัญหาเดียวกัน)
+
+3. **`test.prioritize` crash ทันทีถ้าใช้ตาม workflow ธรรมชาติ (generate แล้ว prioritize ต่อ)** — `TestDesigner.prioritize()` เดิมเรียก `c.priority` ตรง ๆ ซึ่งใช้ได้กับ `TestCase` object เท่านั้น แต่ caller ทุกตัวที่ผ่าน MCP/CLI (รวมถึง `test.generate` เอง) ส่ง-รับเป็น JSON dict เสมอ พอเอา `cases` ที่ได้จาก `test.generate` ไปป้อนต่อ `test.prioritize` ตรง ๆ (ซึ่งเป็นขั้นตอนที่คาดว่าจะทำกันเป็นปกติ) จะได้ `AttributeError` ทันที แก้โดยรองรับทั้ง dict และ object พร้อมคืนผลเป็น dict เสมอ (JSON-serializable ผ่าน MCP)
+
+ทั้งสามมี regression test แล้ว (`tests/test_project_scanner.py`, `tests/test_test_design_generator.py::test_prioritize_*`)
 
 ## 🔒 Approval gate: `fix_loop.apply_patch`
 

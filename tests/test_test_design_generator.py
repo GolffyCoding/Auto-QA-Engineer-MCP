@@ -144,3 +144,32 @@ async def test_analyze_coverage_reports_missing_categories():
     )
     assert result["existing_count"] == 1
     assert "Negative" in result["missing_categories"]
+
+
+def test_prioritize_accepts_dicts_as_returned_by_test_generate():
+    """Found via a real end-to-end run: test.generate returns JSON dicts (as
+    every MCP/CLI caller receives them), and the natural next step for any
+    caller is to feed that straight into test.prioritize. The old
+    implementation called c.priority on each item and crashed immediately
+    on a dict with AttributeError.
+    """
+    designer = TestDesigner("checkout")
+    suite = designer.generate_field_based_tests([{"name": "amount", "type": "number", "required": True}])
+    case_dicts = [c.to_dict() for c in suite.cases]
+
+    prioritized = TestDesigner.prioritize(case_dicts)
+
+    priorities = [c["priority"] for c in prioritized]
+    assert priorities == sorted(priorities, key=lambda p: {
+        "P0 - Critical": 0, "P1 - High": 1, "P2 - Medium": 2, "P3 - Low": 3,
+    }[p])
+
+
+def test_prioritize_output_is_json_serializable():
+    import json
+    designer = TestDesigner("checkout")
+    suite = designer.generate_field_based_tests([{"name": "amount", "type": "number", "required": True}])
+
+    prioritized = TestDesigner.prioritize(suite.cases)
+
+    json.dumps(prioritized)  # must not raise

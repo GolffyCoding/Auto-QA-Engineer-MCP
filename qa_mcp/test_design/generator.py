@@ -688,15 +688,31 @@ class TestDesigner:
         }
 
     @staticmethod
-    def prioritize(cases: List[TestCase]) -> List[TestCase]:
-        """จัดลำดับความสำคัญ"""
+    def prioritize(cases: List[Any]) -> List[Dict[str, Any]]:
+        """จัดลำดับความสำคัญ
+
+        รับได้ทั้ง TestCase object และ plain dict - ในทางปฏิบัติ caller ทุกตัว
+        ที่มาผ่าน MCP/CLI (JSON) ส่ง dict มาเสมอ (เช่น cases ที่ได้กลับมาจาก
+        test.generate เอง) เดิม method นี้เรียก c.priority ตรง ๆ ซึ่ง crash
+        ทันทีถ้า caller ส่ง dict มา - เป็น workflow ที่เกิดขึ้นจริงบ่อยที่สุด
+        (generate แล้วต่อ prioritize) จึงต้อง fail-fast น้อยที่สุดคือรองรับ
+        ทั้งสองแบบ และคืนเป็น dict เสมอเพื่อให้ JSON-serializable ผ่าน MCP
+        """
         priority_order = {
             TestPriority.CRITICAL.value: 0,
             TestPriority.HIGH.value: 1,
             TestPriority.MEDIUM.value: 2,
             TestPriority.LOW.value: 3,
         }
-        return sorted(cases, key=lambda c: priority_order.get(c.priority, 99))
+
+        def as_dict(c):
+            return c.to_dict() if hasattr(c, "to_dict") else c
+
+        def priority_of(c):
+            return c.get("priority") if isinstance(c, dict) else getattr(c, "priority", None)
+
+        dict_cases = [as_dict(c) for c in cases]
+        return sorted(dict_cases, key=lambda c: priority_order.get(priority_of(c), 99))
 
 
 # MCP Tools

@@ -94,10 +94,22 @@ class ProjectScanner:
         AuthType.BASIC: ["basic-auth", "http-basic"],
     }
 
+    # ไดเรกทอรีที่ไม่ใช่โค้ดของโปรเจกต์เอง (vendor/build/vcs-internal) - ถ้าไม่
+    # กรองออก ไฟล์ใน .git (blob ที่ไม่มีนามสกุล) หรือ node_modules/.venv จะ
+    # ครอบงำผลลัพธ์ scan ทั้ง language detection และ route/component finding
+    EXCLUDED_DIRS = {
+        ".git", "__pycache__", "node_modules", ".venv", "venv", "env",
+        "dist", "build", ".pytest_cache", ".mypy_cache", ".tox",
+    }
+
     def __init__(self, project_path: str):
         self.project_path = Path(project_path)
+        # Path(".").name == "" - scanning "the current directory" (the most
+        # common invocation) must not produce a blank project name; resolve
+        # to an absolute path first so .name reflects the real directory.
+        resolved_name = self.project_path.resolve().name
         self.profile = ProjectProfile(
-            name=self.project_path.name,
+            name=resolved_name or str(self.project_path),
             framework="",
             language="",
             database="",
@@ -143,9 +155,19 @@ class ProjectScanner:
         self._detect_ci_cd()
         return self.profile
 
+    def _walk(self, pattern: str = "*"):
+        """rglob() ที่กรอง EXCLUDED_DIRS ออก - ใช้แทน self.project_path.rglob()
+        ทุกที่ ไม่งั้น .git/node_modules/__pycache__ จะปนเข้าไปในผล scan
+        (เจอจริง: .git blob ที่ไม่มีนามสกุลไฟล์ทำให้ language detection
+        เข้าใจผิดว่าเป็น "Unknown" ในโปรเจกต์ Python ล้วน ๆ)
+        """
+        for p in self.project_path.rglob(pattern):
+            if not any(part in self.EXCLUDED_DIRS for part in p.relative_to(self.project_path).parts):
+                yield p
+
     def _detect_language(self):
         """ตรวจหาภาษาหลัก"""
-        files = list(self.project_path.rglob("*"))
+        files = list(self._walk("*"))
         counts = {}
         for f in files:
             if f.is_file():
@@ -169,7 +191,7 @@ class ProjectScanner:
 
     def _detect_framework(self):
         """ตรวจหา framework"""
-        all_files = " ".join([str(p) for p in self.project_path.rglob("*")])
+        all_files = " ".join([str(p) for p in self._walk("*")])
         all_content = ""
 
         # อ่านไฟล์ config หลัก
@@ -213,7 +235,7 @@ class ProjectScanner:
         """ตรวจหา authentication mechanism"""
         all_content = ""
         for ext in [".env", "auth.py", "middleware.py", "security.py", "login.py"]:
-            for path in self.project_path.rglob(f"*{ext}"):
+            for path in self._walk(f"*{ext}"):
                 try:
                     all_content += path.read_text(encoding="utf-8", errors="ignore")
                 except:
@@ -247,11 +269,11 @@ class ProjectScanner:
                     tools.append(name)
 
         # Python
-        for path in self.project_path.rglob("pytest.ini"):
+        for path in self._walk("pytest.ini"):
             tools.append("pytest")
-        for path in self.project_path.rglob("conftest.py"):
+        for path in self._walk("conftest.py"):
             tools.append("pytest")
-        for path in self.project_path.rglob("*robot*"):
+        for path in self._walk("*robot*"):
             tools.append("Robot Framework")
 
         self.profile.testing_tools = list(set(tools))
@@ -283,14 +305,14 @@ class ProjectScanner:
         routes = []
 
         # Next.js / React Router
-        for path in self.project_path.rglob("*page.tsx"):
+        for path in self._walk("*page.tsx"):
             rel = str(path.relative_to(self.project_path))
             route = rel.replace("page.tsx", "").replace("\\", "/")
             if route not in routes:
                 routes.append(route)
 
         # Express / FastAPI routes
-        for path in self.project_path.rglob("*.py"):
+        for path in self._walk("*.py"):
             content = path.read_text(encoding="utf-8", errors="ignore")
             # FastAPI
             for match in re.finditer(r'@app\.(get|post|put|delete)\((["\'])([^"\']+)', content):
@@ -303,7 +325,7 @@ class ProjectScanner:
     def _find_api_endpoints(self):
         """หา API endpoints"""
         endpoints = []
-        for path in self.project_path.rglob("*.py"):
+        for path in self._walk("*.py"):
             content = path.read_text(encoding="utf-8", errors="ignore")
             for match in re.finditer(r'@(app|router)\.(get|post|put|delete|patch)\((?:["\'])([^"\']+)', content):
                 endpoints.append({
@@ -316,7 +338,7 @@ class ProjectScanner:
     def _find_components(self):
         """หา UI components"""
         components = []
-        for path in self.project_path.rglob("*.tsx"):
+        for path in self._walk("*.tsx"):
             rel = str(path.relative_to(self.project_path))
             if "component" in rel.lower() or "ui" in rel.lower():
                 components.append(rel)
@@ -325,7 +347,7 @@ class ProjectScanner:
     def _find_forms(self):
         """หา forms"""
         forms = []
-        for path in self.project_path.rglob("*.tsx"):
+        for path in self._walk("*.tsx"):
             content = path.read_text(encoding="utf-8", errors="ignore")
             if "<form" in content or "useForm" in content or "Form" in content:
                 forms.append(str(path.relative_to(self.project_path)))
