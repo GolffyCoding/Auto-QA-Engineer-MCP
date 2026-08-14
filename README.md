@@ -6,7 +6,7 @@ The core idea: **the LLM should never be the one deciding what counts as a compl
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-108%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-118%20passing-brightgreen)
 ![Validated](https://img.shields.io/badge/validated-real%20browser%20%7C%20real%20network%20%7C%20real%20device-informational)
 
 ---
@@ -85,7 +85,7 @@ asyncio.run(main())
 | 🩺 **Diagnose** | `failure.inspect` classifies failures into 15 categories via weighted pattern matching, with a category-specific root cause and fix suggestion |
 | 🔧 **Fix** | `fix_loop` proposes a patch — **blocked from auto-applying without human approval** |
 | ✅ **Verify** | Re-runs the target test and compares against the baseline run to confirm the fix and catch new regressions |
-| 📊 **Report** | JSON or self-contained HTML report; defect tracking; CI/CD trigger (GitHub Actions, GitLab CI) |
+| 📊 **Report** | Self-contained HTML/JSON report with an executive risk summary and a real root cause + suggested fix on every failed test — not a bare pass/fail table; defect tracking; CI/CD trigger (GitHub Actions, GitLab CI) |
 
 ---
 
@@ -152,6 +152,29 @@ If the agent calls `test.generate` with no dimensions and the feature isn't `"lo
 
 ---
 
+## Reporting: built to hand to a stakeholder, not just a CI dashboard
+
+```python
+run = await session.call_tool("test.create_run", {"suite_name": "checkout-suite"})
+await session.call_tool("test.run", {"test_id": "t1", "command": ["pytest", "test_login.py"]})
+await session.call_tool("test.run", {"test_id": "t2", "command": ["pytest", "test_checkout.py"]})
+report = await session.call_tool("report.generate_html", {"run_id": run_id})
+# -> {"report_id": "...", "path": "./reports/report-....html", "summary": {...}, "executive_summary": {...}}
+```
+
+Every failed test in the report is automatically run through the same classification engine `failure_analysis` uses — you don't have to call `failure.inspect` yourself first. Each one gets a real category (one of 15, from `database` to `security` to `logic`), a specific root cause, and a suggested fix, instead of a bare error string.
+
+The report also carries a **deterministic executive summary** — no LLM-authored prose, just fixed templates over real classification data — meant for someone who doesn't have time to read every test result:
+
+- A one-line headline: *"2 of 10 tests failing (80% pass rate), 1 Critical — risk level: Critical."*
+- A `risk_level` (`None` / `Medium` / `High` / `Critical`) driven by the worst failure category present — a `database`/`auth`/`security` failure is Critical, `api`/`logic`/`concurrency` is High, everything else is Medium
+- Failures broken down by severity and by category
+- The top 5 risks worth looking at first, sorted by severity
+
+`report.generate_html` writes a self-contained HTML file to `./reports/` — open it straight in a browser.
+
+---
+
 ## Built for a team, not a demo
 
 **State survives a restart.** Test runs, defects, failure evidence, and patch proposals persist to a JSON store (`qa_mcp/core/persistence.py`, atomic writes). Kill the `qa-mcp-serve` process, start a new one, and `test.get_run` / `failure.get_evidence` / `report.generate` still return everything.
@@ -182,6 +205,7 @@ python -m pytest tests/ -v
 | `test_executor.py` | Real subprocesses (pass/fail/timeout), real artifact files |
 | `test_defect_manager.py` | Real git repo (`git init`/status/log/commit), fail-fast CI checks |
 | `test_database_analyzer.py` | Real SQLite database, real orphaned-FK detection |
+| `test_reporter.py` | Root-cause diagnosis attached to failed tests, executive-summary risk rollup |
 | `test_api_adapter.py` | Fake HTTP transport (schema/assertion logic) |
 | `test_api_integration.py` | **Real HTTP server + real `k6` binary** — actual sockets, actual load test |
 | `test_browser_adapter.py` | **Real headless Chromium via Playwright** — actual DOM, actual screenshots |
