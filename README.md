@@ -6,7 +6,7 @@ The core idea: **the LLM should never be the one deciding what counts as a compl
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-118%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)
 ![Validated](https://img.shields.io/badge/validated-real%20browser%20%7C%20real%20network%20%7C%20real%20device-informational)
 
 ---
@@ -75,10 +75,11 @@ asyncio.run(main())
 **Want to see it work against something real before wiring it into your own project?**
 
 ```bash
-python3 sample-apps/checkout-demo/run_demo.py
+python3 sample-apps/checkout-demo/run_demo.py    # fields + business_rules
+python3 sample-apps/task-manager/run_demo.py     # fields + roles + states (login, RBAC, a state machine)
 ```
 
-Runs the full pipeline — scan, generate a 29-case deterministic test suite from 4 fields and 1 business rule, execute 5 real tests (real headless-Chromium browser test, real API calls, real SQLite integrity check) against a tiny sample app with two intentional bugs, and produce a full HTML report with an executive risk summary. Takes under a minute, no extra setup. See [`sample-apps/checkout-demo/README.md`](sample-apps/checkout-demo/README.md) for exactly what it demonstrates.
+Each one scans a small sample app with intentional bugs, generates a full deterministic test suite, runs a handful of real tests against it (real headless-Chromium browser test, real HTTP API calls, real SQLite check), and produces HTML **and PDF** reports with an executive risk summary. Takes under a minute each, no extra setup. See [`sample-apps/`](sample-apps/) for exactly what each one demonstrates.
 
 ---
 
@@ -179,7 +180,7 @@ The report also carries a **deterministic executive summary** — no LLM-authore
 - Failures broken down by severity and by category
 - The top 5 risks worth looking at first, sorted by severity
 
-`report.generate_html` writes a self-contained HTML file to `./reports/` — open it straight in a browser.
+`report.generate_html` writes a self-contained HTML file to `./reports/` — open it straight in a browser. **`report.generate_pdf`** renders that same report to a real PDF (via headless Chromium print-to-PDF, not a screenshot — proper page breaks, A4, print-safe colors) so you have something you can actually email, attach to a ticket, or file as a dated record without converting anything yourself.
 
 ---
 
@@ -214,6 +215,7 @@ python -m pytest tests/ -v
 | `test_defect_manager.py` | Real git repo (`git init`/status/log/commit), fail-fast CI checks |
 | `test_database_analyzer.py` | Real SQLite database, real orphaned-FK detection |
 | `test_reporter.py` | Root-cause diagnosis attached to failed tests, executive-summary risk rollup |
+| `test_report_pdf.py` | **Real PDF generation via headless Chromium** — verifies actual `%PDF-` file output |
 | `test_api_adapter.py` | Fake HTTP transport (schema/assertion logic) |
 | `test_api_integration.py` | **Real HTTP server + real `k6` binary** — actual sockets, actual load test |
 | `test_browser_adapter.py` | **Real headless Chromium via Playwright** — actual DOM, actual screenshots |

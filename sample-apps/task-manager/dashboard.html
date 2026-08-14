@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head><title>Task Manager</title></head>
+<body>
+  <h1>Task Manager</h1>
+
+  <div id="login-box">
+    <input id="username" placeholder="username" value="alice" />
+    <input id="password" type="password" placeholder="password" value="admin123" />
+    <button id="login-btn" type="button" onclick="login()">Log in</button>
+  </div>
+
+  <div id="dashboard" style="display:none">
+    <p id="welcome"></p>
+    <ul id="task-list"></ul>
+  </div>
+
+  <div id="result"></div>
+
+  <script>
+    let token = null;
+
+    async function login() {
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        document.getElementById("result").innerText = "Login failed: " + data.error;
+        return;
+      }
+      token = data.token;
+      document.getElementById("login-box").style.display = "none";
+      document.getElementById("dashboard").style.display = "block";
+      document.getElementById("welcome").innerText = "Logged in as " + username + " (" + data.role + ")";
+      await loadTasks();
+    }
+
+    async function loadTasks() {
+      const res = await fetch("/api/tasks", { headers: { "Authorization": "Bearer " + token } });
+      const data = await res.json();
+      const list = document.getElementById("task-list");
+      list.innerHTML = "";
+      for (const t of data.tasks) {
+        const li = document.createElement("li");
+        li.id = "task-" + t.id;
+        li.innerText = t.title + " [" + t.state + "]";
+        list.appendChild(li);
+      }
+    }
+  </script>
+</body>
+</html>

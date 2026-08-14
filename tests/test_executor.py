@@ -27,6 +27,43 @@ async def test_run_test_passes_and_captures_stdout(executor, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_run_test_passes_custom_env_vars_to_subprocess(executor):
+    """A test that needs to know a target URL/credential different from
+    whatever's already in the parent process's environment must be able to
+    get it - real usage (e.g. running the same suite against staging vs.
+    prod) needs this, and it wasn't possible before (run_test had no `env`
+    parameter at all).
+    """
+    await executor.create_run("suite-1")
+    result = await executor.run_test(
+        "t1", "reads env var",
+        command=[sys.executable, "-c", "import os; print(os.environ['DEMO_TARGET_URL'])"],
+        env={"DEMO_TARGET_URL": "http://example.test:1234"},
+    )
+    assert result.status == TestStatus.PASSED.value
+    assert "http://example.test:1234" in result.stdout
+
+
+@pytest.mark.asyncio
+async def test_run_test_still_inherits_parent_environment_with_custom_env(executor, monkeypatch):
+    """Custom env must be merged into the parent environment, not replace
+    it entirely - otherwise PATH and everything else the subprocess needs
+    to even start would disappear.
+    """
+    monkeypatch.setenv("QA_MCP_DEMO_PARENT_VAR", "still-here")
+    await executor.create_run("suite-1")
+    result = await executor.run_test(
+        "t1", "reads both vars",
+        command=[sys.executable, "-c",
+                 "import os; print(os.environ['QA_MCP_DEMO_PARENT_VAR'], os.environ['EXTRA'])"],
+        env={"EXTRA": "added"},
+    )
+    assert result.status == TestStatus.PASSED.value
+    assert "still-here" in result.stdout
+    assert "added" in result.stdout
+
+
+@pytest.mark.asyncio
 async def test_run_test_fails_on_nonzero_exit(executor):
     await executor.create_run("suite-1")
     result = await executor.run_test(

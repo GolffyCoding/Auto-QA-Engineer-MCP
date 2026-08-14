@@ -148,8 +148,15 @@ class TestExecutor:
     async def run_test(self, test_id: str, test_name: str,
                        command: List[str],
                        timeout: int = 120,
-                       capture_artifacts: bool = True) -> TestResult:
-        """รัน test แบบ subprocess พร้อมเก็บ evidence"""
+                       capture_artifacts: bool = True,
+                       env: Optional[Dict[str, str]] = None) -> TestResult:
+        """รัน test แบบ subprocess พร้อมเก็บ evidence
+
+        env: environment variable เพิ่มเติม/override สำหรับ subprocess นี้
+        (merge เข้ากับ os.environ ของ process หลัก ไม่ใช่แทนที่ทั้งหมด) - จำเป็น
+        จริงเวลา test ต้องรู้ target URL/credential ที่ไม่เหมือน default (เช่น
+        รัน suite เดียวกันกับหลาย environment: staging/prod)
+        """
         start_time = datetime.now().isoformat()
         start_ts = time.time()
 
@@ -172,6 +179,7 @@ class TestExecutor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=os.getcwd(),
+                env={**os.environ, **env} if env else None,
             )
 
             stdout, stderr = await asyncio.wait_for(
@@ -287,11 +295,12 @@ class TestExecutor:
 
     async def retry(self, test_id: str, max_retries: int = 3,
                     command: Optional[List[str]] = None,
-                    test_func: Optional[Callable] = None) -> TestResult:
+                    test_func: Optional[Callable] = None,
+                    env: Optional[Dict[str, str]] = None) -> TestResult:
         """รัน test ใหม่ถ้า fail"""
         for attempt in range(max_retries):
             if command:
-                result = await self.run_test(test_id, f"{test_id}-retry-{attempt+1}", command)
+                result = await self.run_test(test_id, f"{test_id}-retry-{attempt+1}", command, env=env)
             elif test_func:
                 result = await self.run_single(f"{test_id}-retry-{attempt+1}", test_func)
             else:
@@ -378,19 +387,23 @@ async def test_create_run(suite_name: str, run_id: Optional[str] = None) -> Dict
     return run.to_dict()
 
 
-async def test_run(test_id: str, command: List[str]) -> Dict[str, Any]:
-    """MCP tool: test.run"""
+async def test_run(test_id: str, command: List[str], env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """MCP tool: test.run - `env` (optional) ตั้งค่า/override environment variable ให้
+    subprocess ของ test นี้เท่านั้น (merge เข้ากับ environment ของ qa-mcp-serve
+    เอง ไม่ใช่แทนที่ทั้งหมด) เช่น ยิง suite เดียวกันไปที่คนละ target URL/credential
+    """
     if _executor.current_run is None:
         await _executor.create_run(f"suite-{test_id}")
-    result = await _executor.run_test(test_id, test_id, command)
+    result = await _executor.run_test(test_id, test_id, command, env=env)
     return result.to_dict()
 
 
-async def test_rerun(test_id: str, command: List[str], max_retries: int = 3) -> Dict[str, Any]:
+async def test_rerun(test_id: str, command: List[str], max_retries: int = 3,
+                     env: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """MCP tool: test.rerun"""
     if _executor.current_run is None:
         await _executor.create_run(f"suite-{test_id}")
-    result = await _executor.retry(test_id, max_retries=max_retries, command=command)
+    result = await _executor.retry(test_id, max_retries=max_retries, command=command, env=env)
     return result.to_dict()
 
 

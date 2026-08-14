@@ -85,6 +85,7 @@ class QAMCPServer:
             # Phase 8: Reporting
             "report.generate": "qa_mcp.core.reporter.report_generate",
             "report.generate_html": "qa_mcp.core.reporter.report_generate_html",
+            "report.generate_pdf": "qa_mcp.core.reporter.report_generate_pdf",
 
             # Phase 9: Database Validation
             "db.get_table_state": "qa_mcp.analyzers.database_analyzer.db_get_table_state",

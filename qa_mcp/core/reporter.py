@@ -204,10 +204,18 @@ class ReportGenerator:
         .sev-medium {{ color: #b7950b; }}
         .sev-low {{ color: #666; }}
         .suggested-fix {{ font-style: italic; color: #444; }}
+        .report-meta {{ color: #666; font-size: 0.9em; margin-top: -10px; margin-bottom: 20px; }}
+        @media print {{
+            body {{ margin: 20px; }}
+            .exec-summary, .summary {{ break-inside: avoid; }}
+            tr {{ break-inside: avoid; }}
+            @page {{ size: A4; margin: 18mm 14mm; }}
+        }}
     </style>
 </head>
 <body>
     <h1>QA Test Report</h1>
+    <p class="report-meta">Report ID: {report['report_id']} &middot; Run: {report['run_id']} &middot; Generated: {report['generated_at']}</p>
 
     <div class="exec-summary {risk_class}">
         <h2>Executive Summary</h2>
@@ -282,6 +290,47 @@ async def report_generate_html(run_id: str, output_path: Optional[str] = None) -
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
+
+    return {"report_id": report["report_id"], "path": path, "summary": report["summary"],
+             "executive_summary": report["executive_summary"]}
+
+
+async def report_generate_pdf(run_id: str, output_path: Optional[str] = None) -> Dict[str, Any]:
+    """MCP tool: report.generate_pdf - สร้าง PDF report จริงลงดิสก์ (ไฟล์ที่เอาไป
+    แนบอีเมล/ส่ง stakeholder/เก็บเป็นเอกสารอ้างอิงได้ตรง ๆ ไม่ต้องแปลงเอง) ใช้
+    headless Chromium ของ Playwright (dependency ที่มีอยู่แล้วในโปรเจกต์) render
+    HTML report เดียวกับ report.generate_html เป็น PDF จริง - ไม่ใช่ screenshot
+    ของหน้าเว็บ แต่เป็น print-to-PDF จริงพร้อม page break ที่ถูกต้อง (@page CSS)
+    """
+    from qa_mcp.execution.executor import _executor
+
+    run = _executor.get_run_dict(run_id)
+    if run is None:
+        return {"error": f"Run '{run_id}' not found - เรียก test.create_run แล้ว test.run ก่อน"}
+
+    report = _reporter.generate(run)
+    html = _reporter.generate_html(report)
+
+    path = output_path or f"./reports/{report['report_id']}.pdf"
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+
+    import tempfile
+    from playwright.async_api import async_playwright
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, encoding="utf-8") as f:
+        f.write(html)
+        html_path = f.name
+
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            await page.goto(f"file://{html_path}")
+            await page.pdf(path=path, format="A4", print_background=True,
+                            margin={"top": "18mm", "bottom": "18mm", "left": "14mm", "right": "14mm"})
+            await browser.close()
+    finally:
+        os.unlink(html_path)
 
     return {"report_id": report["report_id"], "path": path, "summary": report["summary"],
              "executive_summary": report["executive_summary"]}

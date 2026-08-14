@@ -84,12 +84,12 @@ async def main():
     run_id = run["run_id"]
     print(f"4. test.create_run -> {run_id}\n")
 
-    env = {**os.environ, "CHECKOUT_APP_URL": APP_URL}
     print("5. Running tests:")
     for test_id, script in TESTS:
         result = await s.call(
             "test.run", test_id=test_id,
             command=[sys.executable, str(DEMO_DIR / "tests" / script)],
+            env={"CHECKOUT_APP_URL": APP_URL},
         )
         icon = "PASS" if result["status"] == "passed" else "FAIL"
         print(f"   [{icon}] {test_id}")

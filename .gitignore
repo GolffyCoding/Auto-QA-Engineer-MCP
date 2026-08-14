@@ -9,3 +9,4 @@ test-artifacts/
 .venv/
 sample-apps/checkout-demo/checkout.db
 sample-apps/checkout-demo/generated-test-cases.json
+sample-apps/task-manager/generated-test-cases.json

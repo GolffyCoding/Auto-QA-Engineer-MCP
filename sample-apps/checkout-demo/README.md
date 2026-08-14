@@ -37,3 +37,5 @@ This will:
 | `db-orders-fk-integrity` | ❌ Fail — **Critical**, `database` | The seeded orphaned foreign key, found via `db.check_fk_integrity` |
 
 The generated HTML report (path printed at the end, under `./reports/` at the repo root) has an executive summary with a `risk_level` of `Critical` (driven by the database failure) and a root cause + suggested fix attached to every failed test — not just a bare error string. See the main [README.md](../../README.md#reporting-built-to-hand-to-a-stakeholder-not-just-a-ci-dashboard) for what that looks like.
+
+For a version with roles and a state machine (a login-gated internal tool, not just a public form), see [`../task-manager/`](../task-manager/).
